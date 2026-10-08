@@ -1,8 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildChart, type Chart } from "../bazi/chart";
 import { opening, promptsFor, type ChatContext } from "../chat";
+import { WaitStar } from "./WaitStar";
 import { askOracle } from "../oracle/client";
-import { oracleMessages } from "../oracle/prompt";
+import {
+  cleanSummary,
+  confusionMessages,
+  liurenMessages,
+  offeredQuestion,
+  oracleMessages,
+  shouldCast,
+} from "../oracle/prompt";
 import { ROUND_TURNS, starProgress, dailyRoundTurns } from "../galaxy";
 import { knowledgePack } from "../knowledge/pack";
 import { scoreQuiz } from "../mbti";
@@ -73,16 +81,19 @@ export function ChatView({
     setBusy(true);
     setFault("");
     try {
-      const answer = await askOracle(
-        oracleMessages({
-          kind: "chat",
-          question: `正在与星星「${starName}」对话。用户说：${content}`,
-          chart,
-          mbti,
-          stars: state.stars,
-          history: state.messages,
-        }),
-      );
+      const history = state.messages;
+      const answer = shouldCast(content, history)
+        ? await castReading(history, content)
+        : await askOracle(
+            oracleMessages({
+              kind: "chat",
+              question: content,
+              chart,
+              mbti,
+              stars: state.stars,
+              history,
+            }),
+          );
       updateState((prev) => ({
         ...prev,
         roundTurns: prev.roundTurns + 1,
@@ -99,7 +110,18 @@ export function ChatView({
       }));
       setText("");
     } catch (error) {
-      setFault(error instanceof Error ? error.message : "模型没有答上来。");
+      const fault = error instanceof Error ? error.message : "模型没有答上来。";
+      setFault(fault);
+      updateState((prev) => ({
+        ...prev,
+        roundTurns: prev.roundTurns + 1,
+        messages: [
+          ...prev.messages,
+          { id: crypto.randomUUID(), role: "user", text: content, at: Date.now() },
+          { id: crypto.randomUUID(), role: "guide", text: fault, at: Date.now() },
+        ],
+      }));
+      setText("");
     } finally {
       setBusy(false);
     }
@@ -109,7 +131,7 @@ export function ChatView({
     <>
       <div className="thread">
         <div className="bubble guide">
-          {minimal ? "我在。想聊些什么？" : opening(chart, mbti)}
+          {minimal ? "你来了。" : opening(chart, mbti)}
         </div>
         {state.messages.map((message) => (
           <div key={message.id} className={`bubble ${message.role}`}>
@@ -140,7 +162,9 @@ export function ChatView({
             className="ghost"
             type="button"
             disabled={busy}
-            onClick={() => updateState((prev) => finishDailyRound(prev))}
+            onClick={() => {
+              updateState((prev) => finishDailyRound(prev));
+            }}
           >
             结束这一轮，点亮今天的星 ↗
           </button>
@@ -160,30 +184,33 @@ export function ChatView({
           </p>
         )}
       </div>
-      <form
-        className="composer"
-        onSubmit={(event) => {
-          event.preventDefault();
-          send(text);
-        }}
-      >
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder={
-            minimal ? "说点什么…" : `对${starName}说说，今天你在想什么…`
-          }
-          disabled={busy}
-        />
-        <button
-          className="primary"
-          aria-label="发送"
-          type="submit"
-          disabled={busy || !text.trim()}
+      {busy ? (
+        <WaitStar pace="chat" />
+      ) : (
+        <form
+          className="composer"
+          onSubmit={(event) => {
+            event.preventDefault();
+            send(text);
+          }}
         >
-          {minimal ? (busy ? "…" : "↑") : busy ? "在看" : "发送"}
-        </button>
-      </form>
+          <input
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={
+              minimal ? "说点什么…" : `对${starName}说说，今天你在想什么…`
+            }
+          />
+          <button
+            className="primary"
+            aria-label="发送"
+            type="submit"
+            disabled={!text.trim()}
+          >
+            {minimal ? "↑" : "发送"}
+          </button>
+        </form>
+      )}
       {fault && <p className="sky-note">{fault}</p>}
     </>
   );
@@ -206,6 +233,19 @@ export function ChatView({
       {talk}
     </section>
   );
+}
+
+async function castReading(
+  history: { role: "user" | "guide"; text: string }[],
+  latest: string,
+): Promise<string> {
+  let summary = offeredQuestion(history, latest);
+  try {
+    summary = cleanSummary(await askOracle(confusionMessages(history, latest)), summary);
+  } catch {
+    // 总结没出来时，用刚才那句邀请或用户自己的话。
+  }
+  return askOracle(liurenMessages(summary, new Date()));
 }
 
 function whenLabel(at: number) {

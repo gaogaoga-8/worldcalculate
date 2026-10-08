@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { coreStar, isCardPlace, type LitStar, type PlanMark, type StarLink } from "./galaxy";
+import { coreStar, ensurePalaces, isCardPlace, type LitStar, type PlanMark, type StarLink } from "./galaxy";
 import type { QuizAnswers } from "./mbti";
 import type { Person } from "./types";
 
@@ -15,15 +15,20 @@ export type AppState = {
   roundTurns: number;
   people: Person[];
   quiz: QuizAnswers | null;
+  personaSource: "typed" | "quiz" | null;
   messages: ChatMessage[];
   branchMessages: ChatMessage[];
   mirror: string | null;
   plans: PlanMark[];
   settings: Settings;
+  conjunctionAt: number | null;
+  conjunctionAsked: boolean;
 };
 
 const KEY = "shijie-suanfa/v1";
 const RESET_BACKUP_KEY = "shijie-suanfa/before-reset";
+const CHAT_EPOCH = "2";
+const CHAT_EPOCH_KEY = "shijie-suanfa/chat-epoch";
 
 const initial: AppState = {
   self: null,
@@ -33,11 +38,14 @@ const initial: AppState = {
   roundTurns: 0,
   people: [],
   quiz: null,
+  personaSource: null,
   messages: [],
   branchMessages: [],
   mirror: null,
   plans: [],
   settings: { ziHour: "early" },
+  conjunctionAt: null,
+  conjunctionAsked: false,
 };
 
 let state = load();
@@ -49,7 +57,18 @@ function load(): AppState {
     if (!raw) return initial;
     const data = JSON.parse(raw) as { version?: number; state?: AppState };
     if (data.version !== 1 || !data.state) return initial;
-    return hydrate(data.state);
+    const savedPalaces = Array.isArray(data.state.stars)
+      ? data.state.stars.filter((star) => star?.kind === "palace").length
+      : 0;
+    const next = hydrate(data.state);
+    let dirty = next.stars.filter((star) => star.kind === "palace").length !== savedPalaces;
+    if (localStorage.getItem(CHAT_EPOCH_KEY) !== CHAT_EPOCH) {
+      next.messages = [];
+      localStorage.setItem(CHAT_EPOCH_KEY, CHAT_EPOCH);
+      dirty = true;
+    }
+    if (dirty) localStorage.setItem(KEY, JSON.stringify({ version: 1, state: next }));
+    return next;
   } catch {
     return initial;
   }
@@ -76,21 +95,23 @@ export function replaceState(next: AppState) {
 
 export function hydrate(raw: Partial<AppState>): AppState {
   const self = raw.self ?? null;
-  const stars = (Array.isArray(raw.stars) ? raw.stars.filter(isStar) : []).map((star) => ({
+  const stars: LitStar[] = (Array.isArray(raw.stars) ? raw.stars.filter(isStar) : []).map((star) => ({
     ...star,
     note: star.note ?? "",
     echo: star.echo ?? "",
     god: star.god ?? "",
     litAt: star.litAt || Date.now(),
+    reading: star.reading ?? "",
   }));
   if (self && stars.length === 0) stars.push(coreStar("本命"));
+  const sky = self ? withPalaces(stars) : stars;
   const links = (Array.isArray(raw.links) ? raw.links.filter(isLink) : []).map(normalizeLink);
   return {
     ...initial,
     ...raw,
     self,
     galaxyId: typeof raw.galaxyId === "string" && raw.galaxyId ? raw.galaxyId : self ? crypto.randomUUID() : "",
-    stars,
+    stars: sky,
     links,
     roundTurns: typeof raw.roundTurns === "number" ? raw.roundTurns : 0,
     people: Array.isArray(raw.people) ? raw.people : [],
@@ -98,7 +119,10 @@ export function hydrate(raw: Partial<AppState>): AppState {
     branchMessages: Array.isArray(raw.branchMessages) ? raw.branchMessages : [],
     mirror: typeof raw.mirror === "string" ? raw.mirror : null,
     plans: Array.isArray(raw.plans) ? raw.plans.filter(isPlan) : [],
+    personaSource: raw.personaSource === "typed" || raw.personaSource === "quiz" ? raw.personaSource : null,
     settings: { ...initial.settings, ...raw.settings },
+    conjunctionAt: typeof raw.conjunctionAt === "number" ? raw.conjunctionAt : null,
+    conjunctionAsked: raw.conjunctionAsked === true,
   };
 }
 
@@ -138,10 +162,14 @@ export function restartFromLink(href: string): string | null {
   return url.pathname + url.search + url.hash;
 }
 
+function withPalaces(stars: LitStar[]): LitStar[] {
+  return ensurePalaces(stars);
+}
+
 function isStar(value: unknown): value is LitStar {
   if (!value || typeof value !== "object") return false;
   const star = value as LitStar;
-  return typeof star.id === "string" && (star.kind === "core" || star.kind === "round") && typeof star.title === "string";
+  return typeof star.id === "string" && (star.kind === "core" || star.kind === "round" || star.kind === "palace") && typeof star.title === "string";
 }
 
 function isLink(value: unknown): value is StarLink {

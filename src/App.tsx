@@ -4,18 +4,31 @@ import { ConnectMap } from "./components/ConnectMap";
 import { SelfSky } from "./components/SelfSky";
 import { IntakeChat } from "./components/IntakeChat";
 import { Shell, type ViewId } from "./components/Shell";
-import { coreStar } from "./galaxy";
+import { beginOpening } from "./bgm";
+import { coreStar, palaceStars } from "./galaxy";
 import { updateState, useAppState } from "./store";
 import type { Person } from "./types";
 import "./styles.css";
 
 type Phase = "intake" | "galaxy" | "desk";
 
+const OPENING_PREVIEW = "shijie-suanfa/opening-preview";
+
+function openingPreviewPending(): boolean {
+  try {
+    return localStorage.getItem(OPENING_PREVIEW) !== "done";
+  } catch {
+    return false;
+  }
+}
+
 export function App() {
   const state = useAppState();
-  const [phase, setPhase] = useState<Phase>(() =>
-    state.self ? "desk" : "intake",
-  );
+  const [phase, setPhase] = useState<Phase>(() => {
+    if (!state.self) return "intake";
+    return openingPreviewPending() ? "galaxy" : "desk";
+  });
+  const [previewOpening] = useState(() => Boolean(state.self) && openingPreviewPending());
   const [view, setView] = useState<ViewId>("self");
   const [formationId, setFormationId] = useState(0);
 
@@ -29,6 +42,24 @@ export function App() {
     if (!state.self && phase === "desk") setPhase("intake");
   }, [state.self, phase]);
 
+  useEffect(() => {
+    if (!previewOpening || phase !== "galaxy") return;
+    try {
+      localStorage.setItem(OPENING_PREVIEW, "done");
+    } catch {
+      // 这次进不去也没关系，下一次刷新还会按第一次进入。
+    }
+    const start = () => void beginOpening();
+    start();
+    const onGesture = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest("[data-core-star]")) return;
+      start();
+    };
+    window.addEventListener("pointerdown", onGesture);
+    return () => window.removeEventListener("pointerdown", onGesture);
+  }, [previewOpening, phase]);
+
   const chart = useMemo(() => {
     if (!state.self) return null;
     return buildChart(state.self, {
@@ -38,11 +69,12 @@ export function App() {
   }, [state.self, state.settings.ziHour]);
 
   function commit(person: Person) {
+    if (!state.self) void beginOpening();
     updateState((prev) => ({
       ...prev,
       self: { ...person, id: "self" },
       galaxyId: prev.galaxyId || crypto.randomUUID(),
-      stars: prev.self ? prev.stars : [coreStar("本命")],
+      stars: prev.self ? prev.stars : [coreStar("本命"), ...palaceStars()],
       roundTurns: prev.self ? prev.roundTurns : 0,
       messages: prev.self ? prev.messages : [],
       mirror: prev.self ? prev.mirror : null,

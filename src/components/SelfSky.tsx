@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { Chart } from "../bazi/chart";
 import {
   formed,
+  PALACES,
   MIRROR_AT,
   dailyRoundTurns,
   starPosition,
@@ -11,13 +12,15 @@ import {
 } from "../galaxy";
 import { askBond, askFeeling, askThing } from "../insight";
 import { askOracle } from "../oracle/client";
-import { oracleMessages } from "../oracle/prompt";
+import { oracleMessages, palaceMessages } from "../oracle/prompt";
 import { scoreQuiz } from "../mbti";
 import { updateState, useAppState } from "../store";
+import { igniteFate, recedeOpening } from "../bgm";
 import { finishDailyRound } from "../progression";
 import { ChartView } from "./ChartView";
 import { ChatView } from "./ChatView";
 import { PersonaView } from "./PersonaView";
+import { WaitStar } from "./WaitStar";
 import { Nebula } from "./Nebula";
 import { Galaxy } from "./Galaxy";
 
@@ -38,12 +41,18 @@ export function SelfSky({
   const rounds = [...state.stars.filter((star) => star.kind === "round")].sort(
     (a, b) => a.litAt - b.litAt,
   );
+  const palaces = PALACES.flatMap((item) => {
+    const star = state.stars.find((entry) => entry.palace === item.id);
+    return star ? [star] : [];
+  });
   const core = state.stars.find((star) => star.kind === "core");
   const [activeId, setActiveId] = useState(core?.id ?? "");
   const active = state.stars.find((star) => star.id === activeId) ?? core;
   const [modal, setModal] = useState<
-    "chat" | "chart" | "persona" | "ask" | null
+    "chat" | "chart" | "persona" | "ask" | "reading" | null
   >(null);
+  const [debut, setDebut] = useState(false);
+  const [conjuring, setConjuring] = useState(false);
   const [notice, setNotice] = useState("");
   const [now, setNow] = useState(Date.now);
   const [ask, setAsk] = useState<"thing" | "feeling" | "bond">("thing");
@@ -112,20 +121,82 @@ export function SelfSky({
       previous?.focus();
     };
   }, [surfaceOpen]);
+  const conjTimer = useRef(0);
+  const charged = rounds.length >= 1 && !state.conjunctionAt && !conjuring;
+  const conjunctionAsk = !!state.conjunctionAt && !state.conjunctionAsked;
+  function openCore() {
+    if (rounds.length >= 1 && !state.conjunctionAt && !conjuring) {
+      setConjuring(true);
+      void igniteFate();
+      updateState((prev) => ({ ...prev, conjunctionAt: Date.now() }));
+      window.clearTimeout(conjTimer.current);
+      conjTimer.current = window.setTimeout(() => setConjuring(false), 4600);
+      return;
+    }
+    recedeOpening();
+    if (core) select(core);
+  }
   function select(star: LitStar) {
     setActiveId(star.id);
     setNotice("");
-    setModal("chat");
+    setOracle("");
+    setModal(star.kind === "palace" ? "reading" : "chat");
   }
+  useEffect(() => {
+    if (forming || !palaces.length) return;
+    const fresh = palaces.some((star) => Date.now() - star.litAt < 120000);
+    if (!fresh) return;
+    try {
+      if (sessionStorage.getItem("shijie-suanfa/palace-debut-v3")) return;
+      sessionStorage.setItem("shijie-suanfa/palace-debut-v3", "1");
+    } catch {
+      return;
+    }
+    setDebut(true);
+  }, [forming, palaces.length]);
+  useEffect(() => () => window.clearTimeout(conjTimer.current), []);
+  useEffect(() => {
+    if (forming || conjuring || !conjunctionAsk) return;
+    setAsk("thing");
+    setOracle("");
+    if (core) setActiveId(core.id);
+    setModal("ask");
+  }, [forming, conjuring, conjunctionAsk, core]);
+  useEffect(() => {
+    if (modal !== "reading" || active?.kind !== "palace" || !active.palace || active.reading) return;
+    let cancel = false;
+    const id = active.id;
+    const palace = active.palace;
+    setBusy(true);
+    askOracle(palaceMessages(voiced, palace))
+      .then((text) => {
+        if (cancel) return;
+        updateState((prev) => ({
+          ...prev,
+          stars: prev.stars.map((star) => (star.id === id ? { ...star, reading: text } : star)),
+        }));
+      })
+      .catch((error) => {
+        if (!cancel) setOracle(error instanceof Error ? error.message : "模型没有答上来。");
+      })
+      .finally(() => {
+        if (!cancel) setBusy(false);
+      });
+    return () => {
+      cancel = true;
+    };
+  }, [modal, active?.id, active?.kind, active?.palace, active?.reading]);
 
   async function submitAsk(event: FormEvent) {
     event.preventDefault();
     const text = question.trim();
     if (!text || busy) return;
+    const granted = ask === "thing" && conjunctionAsk;
     const completed = state.stars.filter(formed);
     if (
-      (ask === "thing" && completed.length < 1) ||
-      (ask === "feeling" && completed.length < 3)
+      !granted &&
+      ((ask === "thing" && completed.length < 1) ||
+        (ask === "feeling" && completed.length < 3))
     ) {
       setOracle(
         ask === "thing"
@@ -160,6 +231,7 @@ export function SelfSky({
           }),
         ),
       );
+      if (granted) updateState((prev) => ({ ...prev, conjunctionAsked: true }));
     } catch (error) {
       setOracle(error instanceof Error ? error.message : "模型没有答上来。");
     } finally {
@@ -168,7 +240,7 @@ export function SelfSky({
   }
   return (
     <section className="star-world" aria-label="我的星系">
-      <div className={`star-scene${forming ? " is-forming" : ""}`}>
+      <div className={`star-scene${forming ? " is-forming" : ""}${modal === "chat" ? " is-talking" : ""}${charged ? " is-charged" : ""}${conjuring ? " is-conjuring" : ""}`}>
         <Nebula
           formationId={formationId}
           forming={forming}
@@ -176,14 +248,45 @@ export function SelfSky({
           coreRef={coreRef}
           onSettled={onSettled}
         />
+        <div className="star-disk">
+          <div className="star-plane">
+            <div className="star-rail" aria-hidden="true" />
+            {conjuring && (
+              <span className="star-orbit conj-runner" style={{ ["--a" as string]: "0deg" }}>
+                <span className="orb">
+                  <i />
+                </span>
+              </span>
+            )}
+            {palaces.map((star, index) => (
+              <span
+                key={star.id}
+                className={`star-orbit palace${debut ? " debut" : ""}`}
+                style={{ ["--a" as string]: `${index * (360 / palaces.length)}deg`, ["--i" as string]: String(index) }}
+              >
+                <button
+                  type="button"
+                  disabled={forming}
+                  aria-label={star.title}
+                  className={`orb palace ${surfaceOpen && active?.id === star.id ? "on" : ""}`}
+                  onClick={() => select(star)}
+                >
+                  <i />
+                  <b>{star.title}</b>
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
         <button
           ref={coreRef}
           type="button"
           disabled={forming}
-          aria-label="与本命星对话"
+          data-core-star=""
+          aria-label={charged ? "本命已聚光，点击七星连珠" : "与本命星对话"}
           className={`orb core cosmos-core ${surfaceOpen && active?.kind === "core" ? "on" : ""}`}
           style={{ left: "50%", top: "48%" }}
-          onClick={() => core && select(core)}
+          onClick={openCore}
         >
           <i />
           <b>本命</b>
@@ -191,20 +294,23 @@ export function SelfSky({
         {Array.from({ length: MIRROR_AT }, (_, index) => {
           const point = starPosition(index);
           const star = rounds[index];
-          return star ? (
-            <button
-              type="button"
-              disabled={forming}
-              key={star.id}
-              aria-label={`与星星「${star.title}」对话`}
-              className={`orb round ${formed(star) ? "formed" : ""} ${surfaceOpen && active?.id === star.id ? "on" : ""} ${now - star.litAt < 6000 ? "fresh" : ""}`}
-              style={{ left: `${point.x}%`, top: `${point.y}%` }}
-              onClick={() => select(star)}
-            >
-              <i />
-              <b>{star.title}</b>
-            </button>
-          ) : (
+          if (star) {
+            return (
+              <button
+                type="button"
+                disabled={forming}
+                key={star.id}
+                aria-label={`与星星「${star.title}」对话`}
+                className={`orb round ${formed(star) ? "formed" : ""} ${surfaceOpen && active?.id === star.id ? "on" : ""} ${now - star.litAt < 6000 ? "fresh" : ""}${conjuring ? " conjure" : ""}`}
+                style={{ left: `${point.x}%`, top: `${point.y}%` }}
+                onClick={() => select(star)}
+              >
+                <i />
+                <b>{star.title}</b>
+              </button>
+            );
+          }
+          return (
             <button
               type="button"
               disabled={forming}
@@ -223,16 +329,16 @@ export function SelfSky({
                   return;
                 }
                 setNotice(
-                  index === rounds.length
-                    ? progress.litToday
-                      ? "今天已点亮。明天继续。"
-                      : "和本命聊两次，点亮下一颗星。"
-                    : "这颗星，还在等候。 ",
+                  progress.litToday
+                    ? "今天已经点亮一颗。明天再来。"
+                    : progress.allowed
+                      ? "先点亮那颗写着「点亮」的星。"
+                      : "和本命聊满两次，下一颗才会亮。",
                 );
               }}
             >
               <i />
-              <b>待点亮</b>
+              <b>{index === rounds.length && progress.allowed ? "点亮" : "待点亮"}</b>
             </button>
           );
         })}
@@ -247,6 +353,17 @@ export function SelfSky({
           <span>世界</span>
         </button>
         <p className="star-invitation">点击星星</p>
+        {conjuring && (
+          <div className="conjunction" aria-hidden="true">
+            <i className="conj-wave" />
+            <i className="conj-wave late" />
+            <span className="conj-syzygy">
+              {Array.from({ length: 7 }, (_, index) => (
+                <i key={index} style={{ ["--i" as string]: String(index) }} />
+              ))}
+            </span>
+          </div>
+        )}
         {forming && (
           <Galaxy onSkip={() => setSkipToken((token) => token + 1)} />
         )}
@@ -273,7 +390,7 @@ export function SelfSky({
               className="star-surface"
               role="dialog"
               aria-modal="true"
-              aria-label={`${active?.title ?? "本命"}星`}
+              aria-label={active?.kind === "palace" ? active.title : `${active?.title ?? "本命"}星`}
             >
               <header className="star-surface-head">
                 <div>
@@ -288,7 +405,7 @@ export function SelfSky({
                   ×
                 </button>
               </header>
-              <div
+              {modal !== "reading" && <div
                 className="star-tabs"
                 role="tablist"
                 aria-label="星星内容"
@@ -324,8 +441,26 @@ export function SelfSky({
                     </button>
                   ),
                 )}
-              </div>
+              </div>}
               <div className="star-surface-body">
+                {modal === "reading" && active?.kind === "palace" && (
+                  <div className="palace-reading">
+                    <p className="sub">{active.title}</p>
+                    {active.reading ? (
+                      <p className="bubble guide" role="status">
+                        {active.reading}
+                      </p>
+                    ) : oracle && !busy ? (
+                      <p className="bubble guide" role="status">
+                        {oracle}
+                      </p>
+                    ) : (
+                      <WaitStar pace="ask" />
+                    )}
+                  </div>
+                )}
+                {modal !== "reading" && (
+                <>
                 <div
                   id="star-content-chat"
                   role="tabpanel"
@@ -424,7 +559,7 @@ export function SelfSky({
                     className="cosmos-ask"
                   >
                     <div className="ask-types">
-                      {(["thing", "feeling", "bond"] as const).map(
+                      {(conjunctionAsk ? (["thing"] as const) : (["thing", "feeling", "bond"] as const)).map(
                         (kind, i) => (
                           <button
                             key={kind}
@@ -435,37 +570,39 @@ export function SelfSky({
                               setOracle("");
                             }}
                           >
-                            {["一件事", "感情", "关系"][i]}
+                            {conjunctionAsk ? "一件事" : ["一件事", "感情", "关系"][i]}
                           </button>
                         ),
                       )}
                     </div>
-                    <form onSubmit={submitAsk}>
-                      <input
-                        value={question}
-                        onChange={(e) => setQuestion(e.target.value)}
-                        placeholder={
-                          ask === "bond"
-                            ? "好友的名字，以及想问的事…"
-                            : "你想问什么…"
-                        }
-                        disabled={busy}
-                        required
-                      />
-                      <button
-                        aria-label="提问"
-                        className="ask-send"
-                        disabled={busy}
-                      >
-                        {busy ? "…" : "↑"}
-                      </button>
-                    </form>
-                    {oracle && (
+                    {conjunctionAsk && <p className="sub">七星连珠。问一件事。</p>}
+                    {busy ? (
+                      <WaitStar pace="ask" />
+                    ) : (
+                      <form onSubmit={submitAsk}>
+                        <input
+                          value={question}
+                          onChange={(e) => setQuestion(e.target.value)}
+                          placeholder={
+                            ask === "bond"
+                              ? "好友的名字，以及想问的事…"
+                              : "你想问什么…"
+                          }
+                          required
+                        />
+                        <button aria-label="提问" className="ask-send">
+                          ↑
+                        </button>
+                      </form>
+                    )}
+                    {oracle && !busy && (
                       <p className="bubble guide" role="status">
                         {oracle}
                       </p>
                     )}
                   </div>
+                )}
+                </>
                 )}
               </div>
             </section>

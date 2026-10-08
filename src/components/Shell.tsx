@@ -17,6 +17,7 @@ import {
   useAppState,
   type AppState,
 } from "../store";
+import { musicOn, subscribeMusic, toggleMusic } from "../bgm";
 import { readModel, writeModel, type ModelLink } from "../oracle/settings";
 
 export type ViewId = "self" | "connect";
@@ -43,7 +44,9 @@ export function Shell({
   const [notice, setNotice] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const [model, setModel] = useState<ModelLink>(() => readModel());
+  const [music, setMusic] = useState(musicOn);
   const onPhone = Capacitor.isNativePlatform();
+  useEffect(() => subscribeMusic(setMusic), []);
 
   return (
     <div className={`desktop${forming ? " scene-forming" : ""}`}>
@@ -58,6 +61,15 @@ export function Shell({
           <b>世界算法</b>
         </div>
         <div className="menu-wrap">
+          <button
+            className={`icon-btn music-toggle${music ? "" : " off"}`}
+            type="button"
+            aria-pressed={music}
+            aria-label={music ? "关闭音乐" : "打开音乐"}
+            onClick={() => void toggleMusic()}
+          >
+            ♪
+          </button>
           <button
             className="icon-btn"
             onClick={() => setMenu((v) => !v)}

@@ -86,7 +86,42 @@ export function scoreQuiz(answers: QuizAnswers | null): MbtiScore | null {
   return { type: letters.map((item) => item.chosen).join(""), letters };
 }
 
+export const FUNCTION_BLURB: Record<string, string> = {
+  Ni: "先看见还没说出口的结构",
+  Ne: "不断打开另一种可能",
+  Si: "拿已经经历过的来对照",
+  Se: "直接进入眼前这一下",
+  Ti: "把道理在心里拆通",
+  Te: "把事情排成能做的步骤",
+  Fi: "守住自己认定的那条线",
+  Fe: "感到别人此刻在哪",
+};
+
+export const TYPE_STACK: Record<string, string[]> = {
+  INTJ: ["Ni", "Te", "Fi", "Se"],
+  INTP: ["Ti", "Ne", "Si", "Fe"],
+  ENTJ: ["Te", "Ni", "Se", "Fi"],
+  ENTP: ["Ne", "Ti", "Fe", "Si"],
+  INFJ: ["Ni", "Fe", "Ti", "Se"],
+  INFP: ["Fi", "Ne", "Si", "Te"],
+  ENFJ: ["Fe", "Ni", "Se", "Ti"],
+  ENFP: ["Ne", "Fi", "Te", "Si"],
+  ISTJ: ["Si", "Te", "Fi", "Ne"],
+  ISFJ: ["Si", "Fe", "Ti", "Ne"],
+  ESTJ: ["Te", "Si", "Ne", "Fi"],
+  ESFJ: ["Fe", "Si", "Ne", "Ti"],
+  ISTP: ["Ti", "Se", "Ni", "Fe"],
+  ISFP: ["Fi", "Se", "Ni", "Te"],
+  ESTP: ["Se", "Ti", "Fe", "Ni"],
+  ESFP: ["Se", "Fi", "Te", "Ni"],
+};
+
 export const MBTI_TYPES = Object.keys(TYPE_BLURB);
+
+export function normalizeMbti(raw: string): string | null {
+  const type = raw.trim().toUpperCase();
+  return MBTI_TYPES.includes(type) ? type : null;
+}
 
 export const POLE_LABEL: Record<Pole, string> = {
   E: "外倾",

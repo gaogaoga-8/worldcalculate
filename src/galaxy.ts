@@ -52,14 +52,27 @@ export function starPosition(index: number) {
   return { x, y };
 }
 
+export type PalaceId = "ming" | "health" | "career" | "wealth" | "spouse" | "child";
+
+export const PALACES: { id: PalaceId; title: string }[] = [
+  { id: "ming", title: "命宫星" },
+  { id: "health", title: "疾厄星" },
+  { id: "career", title: "官禄星" },
+  { id: "wealth", title: "财帛星" },
+  { id: "spouse", title: "夫妻星" },
+  { id: "child", title: "子女星" },
+];
+
 export type LitStar = {
   id: string;
-  kind: "core" | "round";
+  kind: "core" | "round" | "palace";
   title: string;
   note: string;
   echo: string;
   god: string;
   litAt: number;
+  palace?: PalaceId;
+  reading?: string;
 };
 
 export type CardPlace = { name: string; longitude: number; latitude: number };
@@ -129,6 +142,39 @@ export function isCardPlace(value: unknown): value is CardPlace {
     typeof place.longitude === "number" &&
     typeof place.latitude === "number"
   );
+}
+
+export function palaceStars(now = Date.now()): LitStar[] {
+  return PALACES.map((palace) => ({
+    id: crypto.randomUUID(),
+    kind: "palace" as const,
+    title: palace.title,
+    note: "",
+    echo: "",
+    god: "",
+    litAt: now,
+    palace: palace.id,
+    reading: "",
+  }));
+}
+
+export function ensurePalaces(stars: LitStar[], now = Date.now()): LitStar[] {
+  const missing = PALACES.filter((palace) => !stars.some((star) => star.palace === palace.id));
+  if (!missing.length) return stars;
+  return [
+    ...stars,
+    ...missing.map((palace) => ({
+      id: crypto.randomUUID(),
+      kind: "palace" as const,
+      title: palace.title,
+      note: "",
+      echo: "",
+      god: "",
+      litAt: now,
+      palace: palace.id,
+      reading: "",
+    })),
+  ];
 }
 
 export function coreStar(title = "本命"): LitStar {

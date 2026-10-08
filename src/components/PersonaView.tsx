@@ -1,13 +1,18 @@
-import { useEffect } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { Chart } from "../bazi/chart";
 import {
+  MBTI_TYPES,
   POLE_LABEL,
   QUESTIONS,
+  FUNCTION_BLURB,
   TYPE_BLURB,
+  TYPE_STACK,
+  normalizeMbti,
   scoreQuiz,
   type QuizAnswers,
 } from "../mbti";
-import { updateState } from "../store";
+import { updateState, useAppState } from "../store";
+import { PixelFolk } from "./PixelFolk";
 
 export function PersonaView({
   quiz,
@@ -19,12 +24,51 @@ export function PersonaView({
   const score = scoreQuiz(quiz);
   const answered = QUESTIONS.filter((q) => quiz?.[q.id]).length;
   const current = QUESTIONS.find((q) => !quiz?.[q.id]);
+  const personaSource = useAppState().personaSource;
+  const typed = personaSource === "typed" ? normalizeMbti(chart.person.mbti ?? "") : null;
+  const [writing, setWriting] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [typeFault, setTypeFault] = useState("");
+
+  function remember(type: string) {
+    updateState((prev) => ({
+      ...prev,
+      quiz: null,
+      personaSource: "typed",
+      self: prev.self ? { ...prev.self, mbti: type } : prev.self,
+    }));
+    setWriting(false);
+    setDraft("");
+    setTypeFault("");
+  }
+
+  function redo() {
+    updateState((prev) => ({
+      ...prev,
+      quiz: null,
+      personaSource: null,
+      self: prev.self ? { ...prev.self, mbti: null } : prev.self,
+    }));
+    setWriting(false);
+    setDraft("");
+    setTypeFault("");
+  }
+
+  function submitType(event: FormEvent) {
+    event.preventDefault();
+    const type = normalizeMbti(draft);
+    if (!type) {
+      setTypeFault("写成四字母，例如 INFJ。");
+      return;
+    }
+    remember(type);
+  }
 
   useEffect(() => {
     if (score)
       updateState((prev) =>
-        prev.self && prev.self.mbti !== score.type
-          ? { ...prev, self: { ...prev.self, mbti: score.type } }
+        prev.self && (prev.self.mbti !== score.type || prev.personaSource !== "quiz")
+          ? { ...prev, personaSource: "quiz", self: { ...prev.self, mbti: score.type } }
           : prev,
       );
   }, [score?.type]);
@@ -53,17 +97,11 @@ export function PersonaView({
       <section className="panel">
         <header className="panel-head">
           <h1>人格</h1>
-          <button
-            className="ghost"
-            onClick={() =>
-              updateState((prev) => ({
-                ...prev,
-                quiz: null,
-                self: prev.self ? { ...prev.self, mbti: null } : null,
-              }))
-            }
-          >
+          <button className="ghost" onClick={redo}>
             重做
+          </button>
+          <button className="ghost" type="button" onClick={() => setWriting(true)}>
+            自己填写
           </button>
         </header>
         <div className="panel-body">
@@ -109,6 +147,53 @@ export function PersonaView({
               </p>
             </aside>
           </div>
+        {writing && <TypeEntry draft={draft} fault={typeFault} onDraft={setDraft} onSubmit={submitType} />}
+      </div>
+    </section>
+  );
+  }
+
+  if (typed && !writing) {
+    return (
+      <section className="panel">
+        <header className="panel-head persona-head">
+          <h1>人格</h1>
+          <div className="persona-actions">
+            <button className="ghost" onClick={redo}>重新做题</button>
+            <button className="ghost" type="button" onClick={() => { setWriting(true); setDraft(typed); }}>改类型</button>
+          </div>
+        </header>
+        <div className="panel-body">
+          <div className="persona-typed">
+            <PixelFolk type={typed} />
+            <div className="persona-copy">
+              <p className="type-name">{typed}</p>
+              <ul className="folk-stack">
+                {(TYPE_STACK[typed] ?? []).map((fn) => (
+                  <li key={fn}>
+                    <b>{fn}</b>
+                    {FUNCTION_BLURB[fn]}
+                  </li>
+                ))}
+              </ul>
+              <p>{TYPE_BLURB[typed]}</p>
+              <p className="note">这是你自己写下的类型，不是这二十题算出来的。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (writing && !score) {
+    return (
+      <section className="panel">
+        <header className="panel-head">
+          <h1>人格</h1>
+          <button className="ghost" type="button" onClick={() => setWriting(false)}>返回题目</button>
+        </header>
+        <div className="panel-body">
+          <TypeEntry draft={draft} fault={typeFault} onDraft={setDraft} onSubmit={submitType} />
         </div>
       </section>
     );
@@ -171,9 +256,45 @@ export function PersonaView({
                 上一题
               </button>
             )}
+            <button className="ghost" type="button" onClick={() => setWriting(true)}>
+              我知道自己的类型
+            </button>
           </>
         )}
       </div>
     </section>
+  );
+}
+
+function TypeEntry({
+  draft,
+  fault,
+  onDraft,
+  onSubmit,
+}: {
+  draft: string;
+  fault: string;
+  onDraft: (value: string) => void;
+  onSubmit: (event: FormEvent) => void;
+}) {
+  return (
+    <form className="type-entry" onSubmit={onSubmit}>
+      <p className="sub">十六型里选一个写上。</p>
+      <input
+        value={draft}
+        onChange={(event) => onDraft(event.target.value.toUpperCase())}
+        placeholder="INFJ"
+        maxLength={4}
+        aria-label="人格类型"
+        list="mbti-types"
+      />
+      <datalist id="mbti-types">
+        {MBTI_TYPES.map((type) => (
+          <option key={type} value={type} />
+        ))}
+      </datalist>
+      <button className="primary" type="submit">记下</button>
+      {fault ? <p className="sky-note">{fault}</p> : null}
+    </form>
   );
 }
