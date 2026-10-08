@@ -1,0 +1,172 @@
+[
+  {
+    "frame": 0,
+    "core": "left: 50%; top: 48%; --core-x: 115.808px; --core-y: -43.428px; --core-size: 3.000px; --core-alpha: 0.11077186548069932; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 1,
+    "core": "left: 50%; top: 48%; --core-x: 115.808px; --core-y: -43.428px; --core-size: 3.000px; --core-alpha: 0.4877439934938407; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 2,
+    "core": "left: 50%; top: 48%; --core-x: 115.808px; --core-y: -43.428px; --core-size: 3.000px; --core-alpha: 0.62; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 3,
+    "core": "left: 50%; top: 48%; --core-x: 115.808px; --core-y: -43.428px; --core-size: 3.000px; --core-alpha: 0.62; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 4,
+    "core": "left: 50%; top: 48%; --core-x: 115.808px; --core-y: -43.428px; --core-size: 3.000px; --core-alpha: 0.62; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 5,
+    "core": "left: 50%; top: 48%; --core-x: 115.808px; --core-y: -43.428px; --core-size: 3.000px; --core-alpha: 0.62; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 6,
+    "core": "left: 50%; top: 48%; --core-x: 115.726px; --core-y: -43.457px; --core-size: 3.000px; --core-alpha: 0.62; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 7,
+    "core": "left: 50%; top: 48%; --core-x: 114.998px; --core-y: -43.717px; --core-size: 3.000px; --core-alpha: 0.62; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 8,
+    "core": "left: 50%; top: 48%; --core-x: 113.222px; --core-y: -44.338px; --core-size: 3.000px; --core-alpha: 0.6200884466615195; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 9,
+    "core": "left: 50%; top: 48%; --core-x: 110.339px; --core-y: -45.262px; --core-size: 3.001px; --core-alpha: 0.6233068187378469; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 10,
+    "core": "left: 50%; top: 48%; --core-x: 105.427px; --core-y: -46.408px; --core-size: 3.054px; --core-alpha: 0.6369018686954261; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 11,
+    "core": "left: 50%; top: 48%; --core-x: 98.769px; --core-y: -46.906px; --core-size: 3.243px; --core-alpha: 0.6622289532853806; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 12,
+    "core": "left: 50%; top: 48%; --core-x: 88.995px; --core-y: -45.703px; --core-size: 3.633px; --core-alpha: 0.7019403534186571; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 13,
+    "core": "left: 50%; top: 48%; --core-x: 76.782px; --core-y: -42.002px; --core-size: 4.173px; --core-alpha: 0.7493411374853662; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 14,
+    "core": "left: 50%; top: 48%; --core-x: 61.326px; --core-y: -35.259px; --core-size: 4.874px; --core-alpha: 0.8048264488012722; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 15,
+    "core": "left: 50%; top: 48%; --core-x: 45.394px; --core-y: -26.933px; --core-size: 5.607px; --core-alpha: 0.858335761496122; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 16,
+    "core": "left: 50%; top: 48%; --core-x: 30.093px; --core-y: -18.185px; --core-size: 6.333px; --core-alpha: 0.9077055733227377; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 17,
+    "core": "left: 50%; top: 48%; --core-x: 17.315px; --core-y: -10.556px; --core-size: 6.974px; --core-alpha: 0.9481454019377327; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 18,
+    "core": "left: 50%; top: 48%; --core-x: 8.045px; --core-y: -4.921px; --core-size: 7.476px; --core-alpha: 0.9770714869086562; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 19,
+    "core": "left: 50%; top: 48%; --core-x: 2.354px; --core-y: -1.441px; --core-size: 7.819px; --core-alpha: 0.9941723920561814; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 20,
+    "core": "left: 50%; top: 48%; --core-x: 0.264px; --core-y: -0.161px; --core-size: 7.969px; --core-alpha: 0.9996312804067202; --core-label: 0;",
+    "enabled": false
+  },
+  {
+    "frame": 21,
+    "core": "left: 50%; top: 48%; --core-x: 0.000px; --core-y: 0.000px; --core-size: 8.000px; --core-alpha: 1; --core-label: 0.06452018831983042;",
+    "enabled": false
+  },
+  {
+    "frame": 22,
+    "core": "left: 50%; top: 48%; --core-x: 0.000px; --core-y: 0.000px; --core-size: 8.000px; --core-alpha: 1; --core-label: 0.5655738018991338;",
+    "enabled": false
+  },
+  {
+    "frame": 23,
+    "core": "left: 50%; top: 48%; --core-x: 0.000px; --core-y: 0.000px; --core-size: 8.000px; --core-alpha: 1; --core-label: 0.9871161340200008;",
+    "enabled": false
+  },
+  {
+    "frame": 24,
+    "core": "left: 50%; top: 48%; --core-x: 0.000px; --core-y: 0.000px; --core-size: 8.000px; --core-alpha: 1; --core-label: 1;",
+    "enabled": false
+  },
+  {
+    "frame": 25,
+    "core": "left: 50%; top: 48%; --core-x: 0.000px; --core-y: 0.000px; --core-size: 8.000px; --core-alpha: 1; --core-label: 1;",
+    "enabled": true
+  },
+  {
+    "frame": 26,
+    "core": "left: 50%; top: 48%; --core-x: 0.000px; --core-y: 0.000px; --core-size: 8.000px; --core-alpha: 1; --core-label: 1;",
+    "enabled": true
+  },
+  {
+    "frame": 27,
+    "core": "left: 50%; top: 48%; --core-x: 0.000px; --core-y: 0.000px; --core-size: 8.000px; --core-alpha: 1; --core-label: 1;",
+    "enabled": true
+  },
+  {
+    "frame": 28,
+    "core": "left: 50%; top: 48%; --core-x: 0.000px; --core-y: 0.000px; --core-size: 8.000px; --core-alpha: 1; --core-label: 1;",
+    "enabled": true
+  },
+  {
+    "frame": 29,
+    "core": "left: 50%; top: 48%; --core-x: 0.000px; --core-y: 0.000px; --core-size: 8.000px; --core-alpha: 1; --core-label: 1;",
+    "enabled": true
+  },
+  {
+    "frame": 30,
+    "core": "left: 50%; top: 48%; --core-x: 0.000px; --core-y: 0.000px; --core-size: 8.000px; --core-alpha: 1; --core-label: 1;",
+    "enabled": true
+  },
+  {
+    "frame": 31,
+    "core": "left: 50%; top: 48%; --core-x: 0.000px; --core-y: 0.000px; --core-size: 8.000px; --core-alpha: 1; --core-label: 1;",
+    "enabled": true
+  },
+  {
+    "frame": 32,
+    "core": "left: 50%; top: 48%; --core-x: 0.000px; --core-y: 0.000px; --core-size: 8.000px; --core-alpha: 1; --core-label: 1;",
+    "enabled": true
+  },
+  {
+    "frame": 33,
+    "core": "left: 50%; top: 48%; --core-x: 0.000px; --core-y: 0.000px; --core-size: 8.000px; --core-alpha: 1; --core-label: 1;",
+    "enabled": true
+  }
+]

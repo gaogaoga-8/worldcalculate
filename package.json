@@ -1,0 +1,33 @@
+{
+  "name": "shijie-suanfa",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "check": "tsx src/bazi/selfcheck.ts",
+    "check:experience": "tsx scripts/progression-check.ts",
+    "check:render": "tsx scripts/render-check.tsx",
+    "check:cosmos": "tsx scripts/cosmos-check.ts"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "qrcode": "^1.5.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@cursor/sdk": "^1.0.35",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.5.2",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}
