@@ -9,7 +9,6 @@ import {
   starProgress,
   type LitStar,
 } from "../galaxy";
-import { askBond, askFeeling, askThing } from "../insight";
 import { askOracle } from "../oracle/client";
 import { oracleMessages } from "../oracle/prompt";
 import { scoreQuiz } from "../mbti";
@@ -29,7 +28,7 @@ export function SelfSky({
   onSettled,
 }: {
   chart: Chart;
-  onHome: () => void;
+  onHome: (draft?: string) => void;
   forming?: boolean;
   formationId?: number;
   onSettled?: () => void;
@@ -53,8 +52,16 @@ export function SelfSky({
   const surfaceRef = useRef<HTMLElement>(null);
   const coreRef = useRef<HTMLButtonElement>(null);
   const [skipToken, setSkipToken] = useState(0);
+  const ignition = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (ignition.current) clearTimeout(ignition.current);
+    },
+    [],
+  );
   useEffect(() => {
     if (forming) {
+      if (ignition.current) clearTimeout(ignition.current);
       setModal(null);
       setNotice("");
     }
@@ -122,29 +129,7 @@ export function SelfSky({
     event.preventDefault();
     const text = question.trim();
     if (!text || busy) return;
-    const completed = state.stars.filter(formed);
-    if (
-      (ask === "thing" && completed.length < 1) ||
-      (ask === "feeling" && completed.length < 3)
-    ) {
-      setOracle(
-        ask === "thing"
-          ? "先给一颗星写下你的一句话，再问这件事。"
-          : "完成三颗星的记录后，可以问感情。",
-      );
-      return;
-    }
     const named = state.links.find((link) => text.includes(link.name)) ?? null;
-    const local =
-      ask === "thing"
-        ? askThing(text, state.stars)
-        : ask === "feeling"
-          ? askFeeling(text, state.stars, voiced, state.links)
-          : askBond(text, state.stars, voiced, state.links);
-    if (ask === "bond" && !named) {
-      setOracle(local.text);
-      return;
-    }
     setBusy(true);
     setOracle("");
     try {
@@ -218,8 +203,19 @@ export function SelfSky({
               style={{ left: `${point.x}%`, top: `${point.y}%` }}
               onClick={() => {
                 if (index === rounds.length && progress.allowed) {
-                  updateState((prev) => finishDailyRound(prev));
-                  setNotice("新的星，已经点亮。");
+                  let newId = "";
+                  updateState((prev) => {
+                    const next = finishDailyRound(prev);
+                    if (next !== prev) newId = next.stars.at(-1)?.id || "";
+                    return next;
+                  });
+                  if (newId) {
+                    setNow(Date.now());
+                    ignition.current = setTimeout(() => {
+                      setActiveId(newId);
+                      setModal("chat");
+                    }, 1400);
+                  }
                   return;
                 }
                 setNotice(
@@ -240,11 +236,11 @@ export function SelfSky({
           type="button"
           disabled={forming}
           className="world-object"
-          aria-label="世界与连接"
-          onClick={onHome}
+          aria-label="去远方寻找回声"
+          onClick={() => onHome()}
         >
           <i />
-          <span>世界</span>
+          <span>远方</span>
         </button>
         <p className="star-invitation">点击星星</p>
         {forming && (
@@ -354,7 +350,11 @@ export function SelfSky({
                     </label>
                   )}
                   {active?.kind === "round" && (
-                    <details className="star-memory" key={active.id}>
+                    <details
+                      className="star-memory"
+                      key={active.id}
+                      open={!active.note}
+                    >
                       <summary>星星里的话</summary>
                       <form
                         onSubmit={(event) => {
@@ -377,12 +377,36 @@ export function SelfSky({
                           <input
                             name="note"
                             defaultValue={active.note}
-                            maxLength={42}
+                            maxLength={160}
                             placeholder="留下一句话…"
                           />
                         </label>
                         <button type="submit" className="ghost">
                           记下
+                        </button>
+                        <button
+                          type="button"
+                          className="text-action"
+                          onClick={(event) => {
+                            const form = event.currentTarget.form;
+                            const note = String(
+                              form ? new FormData(form).get("note") || "" : "",
+                            ).trim();
+                            if (!note) {
+                              form?.querySelector("input")?.focus();
+                              return;
+                            }
+                            updateState((prev) => ({
+                              ...prev,
+                              stars: prev.stars.map((s) =>
+                                s.id === active.id ? { ...s, note } : s,
+                              ),
+                            }));
+                            setModal(null);
+                            onHome(note);
+                          }}
+                        >
+                          送到远方 ↗
                         </button>
                       </form>
                     </details>

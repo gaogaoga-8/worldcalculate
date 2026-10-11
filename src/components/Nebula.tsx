@@ -1,5 +1,6 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import {
+  INPUT_STARS,
   dustPosition,
   easeBetween,
   formationPose,
@@ -31,7 +32,7 @@ export function Nebula({
   const scene = useRef({ forming, formationId, skipToken, coreRef, onSettled });
   scene.current = { forming, formationId, skipToken, coreRef, onSettled };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const canvas = ref.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
@@ -128,12 +129,50 @@ export function Nebula({
         hero.style.setProperty("--core-x", `${pose.x.toFixed(3)}px`);
         hero.style.setProperty("--core-y", `${pose.y.toFixed(3)}px`);
         hero.style.setProperty("--core-size", `${pose.size.toFixed(3)}px`);
-        hero.style.setProperty("--core-alpha", String(pose.opacity * visible));
+        hero.style.setProperty("--core-alpha", String(pose.opacity));
         hero.style.setProperty("--core-label", String(pose.label));
       }
       for (const star of distant) {
         ctx.fillStyle = `rgba(210,218,233,${star.alpha * visible})`;
         ctx.fillRect(star.x * w, star.y * h, 0.7, 0.7);
+      }
+      if (p < 0.43) {
+        const merge = easeBetween(p, 0.035, 0.4);
+        const light = 1 - easeBetween(p, 0.27, 0.43);
+        ctx.save();
+        ctx.globalAlpha = light;
+        const points = INPUT_STARS.map((origin, i) => ({
+          x:
+            cx +
+            (origin.x - 0.5) * w * (1 - merge) +
+            Math.sin(merge * Math.PI) * (i === 1 ? -18 : 14),
+          y: cy + (origin.y - 0.48) * h * (1 - merge),
+        }));
+        points[0] = { x: cx + pose.x, y: cy + pose.y };
+        ctx.strokeStyle = "rgba(198,211,236,.16)";
+        ctx.lineWidth = 0.65;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < 4; i++) {
+          const a = points[i - 1],
+            b = points[i % 3];
+          ctx.quadraticCurveTo(
+            (a.x + b.x) / 2 - 16,
+            (a.y + b.y) / 2 - 12,
+            b.x,
+            b.y,
+          );
+        }
+        ctx.stroke();
+        for (const point of points.slice(1)) {
+          ctx.fillStyle = "#e4eaf6";
+          ctx.shadowColor = "#c7d7f4";
+          ctx.shadowBlur = 14;
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
       }
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
@@ -161,6 +200,7 @@ export function Nebula({
           star.alpha *
           shimmer *
           visible *
+          easeBetween(p, 0.12 + star.radius * 0.15, 0.24 + star.radius * 0.15) *
           mix(0.84, star.bright ? 0.75 : 0.24, point.release);
         const size = mix(
           5.5 + star.size * 2,
@@ -225,7 +265,7 @@ export function Nebula({
     const restart = () => {
       cancelAnimationFrame(raf);
       previous = 0;
-      if (!document.hidden) raf = requestAnimationFrame(tick);
+      if (!document.hidden) tick(performance.now());
     };
     const motion = () => {
       reduced = media.matches;
