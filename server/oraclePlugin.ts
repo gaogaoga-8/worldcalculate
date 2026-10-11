@@ -7,23 +7,82 @@ import type { Plugin } from "vite";
 type Turn = { role: "system" | "user" | "assistant"; content: string };
 type Relay = { baseUrl: string; model: string; apiKey: string };
 
-export function oraclePlugin(): Plugin {
-  const handle = async (req: IncomingMessage, res: ServerResponse) => {
+export function createOracleHandler(allowLocalRelay = false) {
+  const rates = new Map<string, { count: number; until: number }>();
+  let active = 0;
+  return async (req: IncomingMessage, res: ServerResponse) => {
     if (req.method !== "POST") {
       res.statusCode = 405;
       res.end();
       return;
     }
+    res.setHeader("cache-control", "no-store");
+    res.setHeader("content-type", "application/json; charset=utf-8");
+    let acquired = false;
     try {
+      const expected = process.env.APP_ORIGIN || `http://${req.headers.host}`;
+      if (req.headers.origin && req.headers.origin !== expected) {
+        res.statusCode = 403;
+        res.end(JSON.stringify({ error: "请从这片星空重新进入。" }));
+        return;
+      }
+      if (!req.headers["content-type"]?.startsWith("application/json")) {
+        res.statusCode = 415;
+        res.end(JSON.stringify({ error: "请求格式不正确。" }));
+        return;
+      }
+      const ip = req.socket.remoteAddress || "local";
+      if (rates.size > 5000)
+        for (const [key, value] of rates)
+          if (value.until < Date.now()) rates.delete(key);
+      let rate = rates.get(ip);
+      if (!rate || rate.until < Date.now()) {
+        rate = { count: 0, until: Date.now() + 60000 };
+        rates.set(ip, rate);
+      }
+      if (++rate.count > 12 || active >= 20) {
+        res.statusCode = 429;
+        res.end(JSON.stringify({ error: "稍等一下，再继续聊。" }));
+        return;
+      }
+      active++;
+      acquired = true;
       const body = JSON.parse(await readBody(req)) as {
         messages?: Turn[];
         relay?: Relay;
       };
       const messages = Array.isArray(body.messages) ? body.messages : [];
-      if (!messages.length) throw new Error("没有问题。");
+      if (
+        !messages.length ||
+        messages.length > 32 ||
+        messages.some(
+          (m) =>
+            !m ||
+            !["system", "user", "assistant"].includes(m.role) ||
+            typeof m.content !== "string" ||
+            m.content.length > 24000,
+        )
+      )
+        throw new Error("这段对话太长了，试着分开说。");
+      const configured = process.env.ORACLE_API_KEY
+        ? {
+            baseUrl: process.env.ORACLE_BASE_URL || "",
+            model: process.env.ORACLE_MODEL || "",
+            apiKey: process.env.ORACLE_API_KEY,
+          }
+        : null;
+      const local =
+        ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(ip) &&
+        /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(
+          req.headers.host || "",
+        );
+      if (body.relay?.apiKey && (!allowLocalRelay || !local))
+        throw new Error("请使用这片星空已连接的聊天模型。");
       const text = body.relay?.apiKey
         ? await relay(body.relay, messages)
-        : await cursorAsk(messages);
+        : configured
+          ? await relay(configured, messages)
+          : await cursorAsk(messages);
       res.setHeader("content-type", "application/json; charset=utf-8");
       res.end(JSON.stringify({ text }));
     } catch (error) {
@@ -34,8 +93,14 @@ export function oraclePlugin(): Plugin {
           error: error instanceof Error ? error.message : "模型没有答上来。",
         }),
       );
+    } finally {
+      if (acquired) active--;
     }
   };
+}
+
+export function oraclePlugin(): Plugin {
+  const handle = createOracleHandler(true);
   return {
     name: "oracle",
     configureServer(server) {
@@ -97,6 +162,8 @@ const builtinCursorKey = "";
 
 async function cursorAsk(messages: Turn[]): Promise<string> {
   const apiKey = process.env.CURSOR_API_KEY?.trim() || builtinCursorKey;
+  if (!apiKey)
+    throw new Error("聊天模型还没接好。可以先留下一句话，或在菜单接入模型。");
   const sdk = (await import("@cursor/sdk")) as {
     Agent: {
       prompt: (
@@ -113,7 +180,7 @@ async function cursorAsk(messages: Turn[]): Promise<string> {
   const dir = path.join(os.tmpdir(), "shijie-suanfa-oracle");
   fs.mkdirSync(dir, { recursive: true });
   const prompt = [
-    "只输出命理回答的正文。不要使用工具，不要创建或修改任何文件。",
+    "只输出对用户的自然语言回复。遵循对话中的系统规则，不要使用工具，不要创建或修改任何文件。",
     ...messages.map(
       (message) =>
         `${message.role === "system" ? "主控" : message.role === "assistant" ? "之前的回答" : "来问"}\n${message.content}`,
@@ -131,13 +198,13 @@ async function cursorAsk(messages: Turn[]): Promise<string> {
   return text;
 }
 
-function readBody(req: IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    req.on("data", (chunk) =>
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)),
-    );
-    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    req.on("error", reject);
-  });
+async function readBody(req: IncomingMessage): Promise<string> {
+  let size = 0;
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > 100000) throw new Error("这段对话太长了，试着分开说。");
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }

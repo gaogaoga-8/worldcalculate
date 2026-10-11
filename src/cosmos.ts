@@ -1,4 +1,9 @@
 export const FORMATION_MS = 7600;
+export const INPUT_STARS = [
+  { id: "birth", x: 0.32, y: 0.4 },
+  { id: "place", x: 0.65, y: 0.32 },
+  { id: "name", x: 0.6, y: 0.64 },
+] as const;
 
 export const mix = (from: number, to: number, amount: number) =>
   from + (to - from) * amount;
@@ -9,16 +14,18 @@ export function easeBetween(value: number, from: number, to: number) {
 }
 
 export function formationPose(progress: number, width: number, height: number) {
-  const arrival = easeBetween(progress, 0.24, 0.87);
+  const arrival = easeBetween(progress, 0.035, 0.6);
   const distance = Math.min(width * 0.28, height * 0.44);
   const arc = arrival === 1 ? 0 : Math.sin(arrival * Math.PI);
   return {
-    x: distance * (0.4 * (1 - arrival) + arc * 0.065),
-    y: distance * (-0.15 * (1 - arrival) - arc * 0.07),
-    size: mix(3, 8, easeBetween(progress, 0.38, 0.88)),
-    opacity: mix(0.62, 1, easeBetween(progress, 0.34, 0.86)),
+    x: width * (INPUT_STARS[0].x - 0.5) * (1 - arrival) + distance * arc * 0.06,
+    y:
+      height * (INPUT_STARS[0].y - 0.48) * (1 - arrival) -
+      distance * arc * 0.045,
+    size: mix(6, 8, easeBetween(progress, 0.38, 0.88)),
+    opacity: mix(0.95, 1, easeBetween(progress, 0.34, 0.86)),
     label: easeBetween(progress, 0.85, 0.97),
-    release: easeBetween(progress, 0.06, 0.8),
+    release: easeBetween(progress, 0.3, 0.9),
   };
 }
 
@@ -39,8 +46,8 @@ export function dustPosition(
 ) {
   const release = easeBetween(
     progress,
-    0.06 + star.radius * 0.09,
-    0.73 + star.radius * 0.06,
+    0.35 + star.radius * 0.05,
+    0.8 + star.radius * 0.06,
   );
   const scale = Math.min(width * 0.29, height * 0.43);
   const angle = star.angle + release * 0.32;

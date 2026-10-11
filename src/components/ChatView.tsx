@@ -25,6 +25,9 @@ export function ChatView({
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [fault, setFault] = useState("");
+  const [pending, setPending] = useState("");
+  const request = useRef<AbortController | null>(null);
+  useEffect(() => () => request.current?.abort(), []);
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 15000);
@@ -65,43 +68,58 @@ export function ChatView({
       top: endRef.current.parentElement.scrollHeight,
       behavior: "smooth",
     });
-  }, [state.messages.length]);
+  }, [state.messages.length, pending]);
 
   async function send(value: string) {
     const content = value.trim();
     if (!content || busy) return;
     setBusy(true);
+    setPending(content);
     setFault("");
+    const controller = new AbortController();
+    request.current = controller;
+    const galaxyId = state.galaxyId;
     try {
       const answer = await askOracle(
         oracleMessages({
           kind: "chat",
-          question: `正在与星星「${starName}」对话。用户说：${content}`,
+          question: content,
+          starName,
           chart,
           mbti,
           stars: state.stars,
           history: state.messages,
         }),
+        controller.signal,
       );
-      updateState((prev) => ({
-        ...prev,
-        roundTurns: prev.roundTurns + 1,
-        messages: [
-          ...prev.messages,
-          {
-            id: crypto.randomUUID(),
-            role: "user",
-            text: content,
-            at: Date.now(),
-          },
-          { id: crypto.randomUUID(), role: "guide", text: answer },
-        ],
-      }));
+      if (controller.signal.aborted) return;
+      updateState((prev) =>
+        prev.galaxyId !== galaxyId
+          ? prev
+          : {
+              ...prev,
+              roundTurns: prev.roundTurns + 1,
+              messages: [
+                ...prev.messages,
+                {
+                  id: crypto.randomUUID(),
+                  role: "user",
+                  text: content,
+                  at: Date.now(),
+                },
+                { id: crypto.randomUUID(), role: "guide", text: answer },
+              ],
+            },
+      );
       setText("");
     } catch (error) {
-      setFault(error instanceof Error ? error.message : "模型没有答上来。");
+      if (!controller.signal.aborted)
+        setFault(
+          error instanceof Error ? error.message : "暂时没收到回复，再试一次。",
+        );
     } finally {
       setBusy(false);
+      setPending("");
     }
   }
 
@@ -109,7 +127,11 @@ export function ChatView({
     <>
       <div className="thread">
         <div className="bubble guide">
-          {minimal ? "我在。想聊些什么？" : opening(chart, mbti)}
+          {minimal
+            ? state.messages.length
+              ? "我们接着聊。"
+              : `${chart.person.name === "你" ? "" : chart.person.name + "，"}今天过得怎么样？`
+            : opening(chart, mbti)}
         </div>
         {state.messages.map((message) => (
           <div key={message.id} className={`bubble ${message.role}`}>
@@ -119,6 +141,16 @@ export function ChatView({
             {message.text}
           </div>
         ))}
+        {pending && (
+          <>
+            <div className="bubble user">{pending}</div>
+            <div className="listening-dots" role="status" aria-label="正在回应">
+              <i />
+              <i />
+              <i />
+            </div>
+          </>
+        )}
         {!minimal && (
           <div className="chips">
             {promptsFor(ctx).map((prompt) => (
@@ -156,7 +188,9 @@ export function ChatView({
                   ? minimal
                     ? "明天，继续点亮。"
                     : "今天已点亮一颗星 · 明天继续"
-                  : `再完成 ${Math.max(0, ROUND_TURNS - todayTurns)} 次对话，点亮今天的星`}
+                  : minimal
+                    ? ""
+                    : `再完成 ${Math.max(0, ROUND_TURNS - todayTurns)} 次对话，点亮今天的星`}
           </p>
         )}
       </div>
@@ -184,7 +218,11 @@ export function ChatView({
           {minimal ? (busy ? "…" : "↑") : busy ? "在看" : "发送"}
         </button>
       </form>
-      {fault && <p className="sky-note">{fault}</p>}
+      {fault && (
+        <p className="sky-note" role="alert">
+          {fault}
+        </p>
+      )}
     </>
   );
   if (embedded)

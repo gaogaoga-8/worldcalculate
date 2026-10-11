@@ -16,6 +16,7 @@ import {
   emptyBirth,
 } from "../src/components/BirthFields";
 import { PROVINCES } from "../src/places";
+import { RITUALS } from "../src/ritual";
 
 const beforeMidnight = Date.parse("2026-10-06T23:59:59+08:00");
 const midnight = Date.parse("2026-10-07T00:00:00+08:00");
@@ -200,4 +201,27 @@ assert.equal(
   finishDailyRound(eligible, midnight),
   eligible,
   "Click at midnight rechecks today's conversations",
+);
+assert.equal(new Set(RITUALS.map((ritual) => ritual.title)).size, 7);
+let journey = eligible;
+for (let i = 0; i < 7; i++) {
+  const at = beforeMidnight + i * 86400000;
+  journey = {
+    ...journey,
+    roundTurns: 2,
+    messages: [
+      ...journey.messages,
+      { id: `day-${i}-a`, role: "user", text: "今天的新对话", at },
+      { id: `day-${i}-b`, role: "user", text: "今天的第二次对话", at },
+    ],
+  };
+  const next = finishDailyRound(journey, at);
+  assert.equal(next.stars.at(-1)?.title, RITUALS[i].title);
+  assert.equal(next.stars.at(-1)?.echo, RITUALS[i].prompt);
+  assert.equal(next.roundTurns, 0);
+  assert.equal(finishDailyRound(next, at), next);
+  journey = next;
+}
+console.log(
+  "Seven distinct daily questions and atomic reward progression: passed.",
 );

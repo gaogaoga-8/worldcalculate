@@ -3,14 +3,20 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
+    "dev": "tsx --env-file-if-exists=.env node_modules/vite/bin/vite.js",
+    "build": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json && vite build",
+    "start": "tsx --env-file-if-exists=.env server/index.ts",
+    "preview": "tsx --env-file-if-exists=.env node_modules/vite/bin/vite.js preview",
     "check": "tsx src/bazi/selfcheck.ts",
     "check:experience": "tsx scripts/progression-check.ts",
     "check:render": "tsx scripts/render-check.tsx",
-    "check:cosmos": "tsx scripts/cosmos-check.ts"
+    "check:cosmos": "tsx scripts/cosmos-check.ts",
+    "check:community": "tsx scripts/community-check.ts",
+    "check:reset": "tsx scripts/reset-check.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",

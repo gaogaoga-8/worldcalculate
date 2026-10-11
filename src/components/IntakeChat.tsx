@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppState } from "../store";
 import { PROVINCES } from "../places";
+import { INPUT_STARS } from "../cosmos";
 import type { Gender, Person } from "../types";
 import {
   BirthFields,
@@ -12,7 +13,6 @@ import {
   type BirthSelection,
   type LocationSelection,
 } from "./BirthFields";
-
 export function IntakeChat({
   onDone,
   onBack,
@@ -21,15 +21,14 @@ export function IntakeChat({
   onBack?: () => void;
 }) {
   const self = useAppState().self;
-  const existingRegion = PROVINCES.find((p) =>
+  const region = PROVINCES.find((p) =>
     p.cities.some(
       (c) =>
         c.name === self?.place.name ||
         c.name.replace(/市$/, "") === self?.place.name,
     ),
   );
-  const [step, setStep] = useState(0);
-  const [birth, setBirth] = useState<BirthSelection>(() =>
+  const [birth, setBirth] = useState<BirthSelection>(
     self
       ? {
           year: String(self.time.year),
@@ -41,44 +40,69 @@ export function IntakeChat({
         }
       : { ...emptyBirth },
   );
-  const [location, setLocation] = useState<LocationSelection>(() =>
-    existingRegion
+  const [location, setLocation] = useState<LocationSelection>(
+    region
       ? {
           country: "CN",
-          province: existingRegion.code,
+          province: region.code,
           city:
-            existingRegion.cities.find(
+            region.cities.find(
               (c) =>
                 c.name === self?.place.name ||
                 c.name.replace(/市$/, "") === self?.place.name,
-            )?.code ?? "",
+            )?.code || "",
         }
       : { ...emptyLocation },
   );
-  const [gender, setGender] = useState<Gender | "">(self?.gender ?? "");
+  const [name, setName] = useState(self?.name === "你" ? "" : self?.name || "");
+  const [gender, setGender] = useState<Gender | "">(self?.gender || "");
+  const [done, setDone] = useState([
+    !!self,
+    !!self,
+    !!self && !!self.name && self.name !== "你",
+  ]);
+  const [active, setActive] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [joining, setJoining] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const city = selectedCity(location);
-  function next() {
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+  useEffect(() => {
+    if (active !== null)
+      formRef.current?.querySelector<HTMLElement>("select,input")?.focus();
+  }, [active]);
+  function save() {
     setError("");
-    if (step === 0) {
-      const fault = birthError(birth);
-      if (fault) {
-        setError(fault);
-        return;
-      }
-      setStep(1);
-    } else {
-      if (!city) {
-        setError("请选择出生城市。");
-        return;
-      }
-      if (!gender) {
-        setError("请选择性别。");
-        return;
-      }
-      onDone({
+    const fault =
+      active === 0
+        ? birthError(birth)
+        : active === 1
+          ? !city
+            ? "请选择出生城市。"
+            : null
+          : !name.trim()
+            ? "给这颗星一个名字。"
+            : !gender
+              ? "请选择性别。"
+              : null;
+    if (fault) {
+      setError(fault);
+      return;
+    }
+    const completed = done.map((v, i) => (i === active ? true : v));
+    setDone(completed);
+    setActive(null);
+    if (completed.every(Boolean) && city && gender) {
+      setJoining(true);
+      const person: Person = {
         id: "self",
-        name: self?.name || "你",
+        name: name.trim(),
         gender,
         time: {
           year: Number(birth.year),
@@ -94,88 +118,132 @@ export function IntakeChat({
           timezone: 8,
         },
         hourUnknown: birth.unknown,
-        mbti: self?.mbti ?? null,
-      });
+        mbti: self?.mbti || null,
+      };
+      timer.current = setTimeout(() => onDone(person), 800);
     }
   }
+  const labels = ["生日", "来处", "名字"];
+  const summaries = [`${birth.month}月${birth.day}日`, city?.name, name.trim()];
   return (
-    <main className="intake minimal-intake">
-      <form
-        className="minimal-entry"
-        onSubmit={(event) => {
-          event.preventDefault();
-          next();
-        }}
-      >
-        <h1>
-          {step === 0 ? "出生时刻" : "出生地"}
-          {step === 0 && <small>公历</small>}
-        </h1>
-        <div className="minimal-fields" key={step}>
-          {step === 0 ? (
+    <main
+      className={`intake constellation-intake${joining ? " joining" : ""}`}
+      aria-label="三颗星，开始你的星系"
+    >
+      <div className="intake-constellation">
+        {INPUT_STARS.map((star, index) => (
+          <button
+            key={star.id}
+            type="button"
+            className={`intake-star ${done[index] ? "filled" : ""} ${active === index ? "active" : ""} ${!done[index] && done.filter(Boolean).length === index ? "calling" : ""}`}
+            style={{ left: `${star.x * 100}%`, top: `${star.y * 100}%` }}
+            aria-label={`填写${labels[index]}`}
+            aria-pressed={active === index}
+            disabled={joining}
+            onClick={() => {
+              setActive(index);
+              setError("");
+            }}
+          >
+            <i />
+            <span>{done[index] ? summaries[index] : labels[index]}</span>
+          </button>
+        ))}
+      </div>
+      {active === null && !joining && (
+        <p className="intake-hint">
+          {done.some(Boolean) ? "还有星星在等你" : "点一颗星，开始"}
+        </p>
+      )}
+      {onBack && (
+        <button
+          className="constellation-back text-action"
+          onClick={onBack}
+          disabled={joining}
+          aria-label="返回星系"
+        >
+          ←
+        </button>
+      )}
+      {active !== null && (
+        <form
+          ref={formRef}
+          className="intake-sheet minimal-entry"
+          aria-label={labels[active]}
+          onSubmit={(e) => {
+            e.preventDefault();
+            save();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setActive(null);
+              setError("");
+            }
+          }}
+        >
+          <header>
+            <h1>
+              {active === 0
+                ? "出生时刻"
+                : active === 1
+                  ? "出生地"
+                  : "怎么称呼你"}
+              {active === 0 && <small>公历</small>}
+            </h1>
+            <button
+              type="button"
+              className="surface-close"
+              aria-label="收起填写"
+              onClick={() => setActive(null)}
+            >
+              ×
+            </button>
+          </header>
+          {active === 0 ? (
             <BirthFields value={birth} onChange={setBirth} minimal />
+          ) : active === 1 ? (
+            <LocationFields value={location} onChange={setLocation} minimal />
           ) : (
             <>
-              <LocationFields value={location} onChange={setLocation} minimal />
-              {city && (
-                <fieldset className="minimal-gender">
-                  <legend>性别</legend>
-                  {(["male", "female"] as const).map((value, index) => (
-                    <label
-                      key={value}
-                      className={gender === value ? "selected" : ""}
-                    >
-                      <input
-                        type="radio"
-                        name="gender"
-                        value={value}
-                        checked={gender === value}
-                        required
-                        onChange={() => setGender(value)}
-                      />
-                      <span>{index === 0 ? "男" : "女"}</span>
-                    </label>
-                  ))}
-                </fieldset>
-              )}
+              <input
+                className="name-field"
+                aria-label="名字"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="你的名字或昵称"
+                maxLength={24}
+                autoComplete="nickname"
+                required
+              />
+              <fieldset className="minimal-gender">
+                <legend>性别</legend>
+                {(["male", "female"] as const).map((v, i) => (
+                  <label key={v} className={gender === v ? "selected" : ""}>
+                    <input
+                      type="radio"
+                      name="gender"
+                      checked={gender === v}
+                      onChange={() => setGender(v)}
+                      required
+                    />
+                    <span>{i === 0 ? "男" : "女"}</span>
+                  </label>
+                ))}
+              </fieldset>
             </>
           )}
-        </div>
-        {error && (
-          <p className="minimal-error" role="alert">
-            {error}
-          </p>
-        )}
-        <div className="minimal-entry-actions">
-          {step > 0 || onBack ? (
-            <button
-              className="entry-back"
-              type="button"
-              aria-label={step > 0 ? "上一步" : "返回星系"}
-              onClick={() => {
-                setError("");
-                if (step > 0) setStep(step - 1);
-                else onBack?.();
-              }}
-            >
-              ←
-            </button>
-          ) : (
-            <span />
+          {error && (
+            <p className="minimal-error" role="alert">
+              {error}
+            </p>
           )}
-          <div className="entry-dots" aria-label={`第 ${step + 1} 步，共 2 步`}>
-            <i className={step === 0 ? "on" : ""} />
-            <i className={step === 1 ? "on" : ""} />
+          <div className="intake-save">
+            <button className="entry-next" aria-label="点亮这颗星">
+              ✓
+            </button>
           </div>
-          <button
-            className="entry-next"
-            type="submit"
-            aria-label={step === 0 ? "继续" : "生成星系"}
-          >
-            →
-          </button>
-        </div>
-      </form>
+        </form>
+      )}
     </main>
   );
 }
