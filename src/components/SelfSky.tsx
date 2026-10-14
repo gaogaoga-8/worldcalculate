@@ -10,7 +10,6 @@ import {
   starProgress,
   type LitStar,
 } from "../galaxy";
-import { askBond, askFeeling, askThing } from "../insight";
 import { askOracle } from "../oracle/client";
 import { oracleMessages, palaceMessages } from "../oracle/prompt";
 import { scoreQuiz } from "../mbti";
@@ -65,8 +64,16 @@ export function SelfSky({
   const surfaceRef = useRef<HTMLElement>(null);
   const coreRef = useRef<HTMLButtonElement>(null);
   const [skipToken, setSkipToken] = useState(0);
+  const ignition = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (ignition.current) clearTimeout(ignition.current);
+    },
+    [],
+  );
   useEffect(() => {
     if (forming) {
+      if (ignition.current) clearTimeout(ignition.current);
       setModal(null);
       setNotice("");
     }
@@ -222,16 +229,6 @@ export function SelfSky({
       return;
     }
     const named = state.links.find((link) => text.includes(link.name)) ?? null;
-    const local =
-      ask === "thing"
-        ? askThing(text, state.stars)
-        : ask === "feeling"
-          ? askFeeling(text, state.stars, voiced, state.links)
-          : askBond(text, state.stars, voiced, state.links);
-    if (ask === "bond" && !named) {
-      setOracle(local.text);
-      return;
-    }
     setBusy(true);
     setOracle("");
     try {
@@ -340,8 +337,19 @@ export function SelfSky({
               style={{ left: `${point.x}%`, top: `${point.y}%` }}
               onClick={() => {
                 if (index === rounds.length && progress.allowed) {
-                  updateState((prev) => finishDailyRound(prev));
-                  setNotice("新的星，已经点亮。");
+                  let newId = "";
+                  updateState((prev) => {
+                    const next = finishDailyRound(prev);
+                    if (next !== prev) newId = next.stars.at(-1)?.id || "";
+                    return next;
+                  });
+                  if (newId) {
+                    setNow(Date.now());
+                    ignition.current = setTimeout(() => {
+                      setActiveId(newId);
+                      setModal("chat");
+                    }, 1400);
+                  }
                   return;
                 }
                 setNotice(
@@ -505,7 +513,11 @@ export function SelfSky({
                     </label>
                   )}
                   {active?.kind === "round" && (
-                    <details className="star-memory" key={active.id}>
+                    <details
+                      className="star-memory"
+                      key={active.id}
+                      open={!active.note}
+                    >
                       <summary>星星里的话</summary>
                       <form
                         onSubmit={(event) => {
@@ -528,7 +540,7 @@ export function SelfSky({
                           <input
                             name="note"
                             defaultValue={active.note}
-                            maxLength={42}
+                            maxLength={160}
                             placeholder="留下一句话…"
                           />
                         </label>

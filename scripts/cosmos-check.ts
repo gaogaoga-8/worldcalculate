@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import { dustPosition, formationPose, FORMATION_MS } from "../src/cosmos";
+import {
+  dustPosition,
+  formationPose,
+  FORMATION_MS,
+  INPUT_STARS,
+} from "../src/cosmos";
 
 const dimensions = [
   [1280, 658],
@@ -14,8 +19,13 @@ for (const [width, height] of dimensions) {
   assert.equal(settled.label, 1);
   assert.equal(settled.opacity, 1);
   assert.ok(
-    formationPose(0.45, width, height).x > 0,
+    Math.abs(formationPose(0.45, width, height).x) > 0,
     "The selected star travels out of the dust before becoming the core",
+  );
+  assert.equal(
+    formationPose(0, width, height).x,
+    width * (INPUT_STARS[0].x - 0.5),
+    "The birthday point is the same star that travels to the core",
   );
   for (let index = 0; index < 60; index++) {
     const star = {

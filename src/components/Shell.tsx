@@ -21,7 +21,7 @@ import { restoreAccount, restoreKey, saveAccount } from "../account";
 import { musicOn, subscribeMusic, toggleMusic } from "../bgm";
 import { readModel, writeModel, type ModelLink } from "../oracle/settings";
 
-export type ViewId = "self" | "connect";
+export type ViewId = "self" | "connect" | "cards";
 
 type Props = {
   mode: "intake" | "desk";
@@ -29,6 +29,7 @@ type Props = {
   view?: ViewId;
   onReplay?: () => void;
   onEdit?: () => void;
+  onCards?: () => void;
   children: ReactNode;
 };
 
@@ -37,6 +38,7 @@ export function Shell({
   forming = false,
   onReplay,
   onEdit,
+  onCards,
   children,
 }: Props) {
   const state = useAppState();
@@ -119,6 +121,14 @@ export function Shell({
                       重新录入
                     </button>
                     <button onClick={exportJson}>导出</button>
+                    <button
+                      onClick={() => {
+                        setMenu(false);
+                        onCards?.();
+                      }}
+                    >
+                      星图卡
+                    </button>
                     <label className="file">
                       导入
                       <input
@@ -131,56 +141,58 @@ export function Shell({
                     </label>
                   </>
                 )}
+                <details className="model-settings">
+                  <summary>连接模型</summary>
+                  <label className="model-field">
+                    接口
+                    <input
+                      value={model.baseUrl}
+                      onChange={(event) =>
+                        setModel({ ...model, baseUrl: event.target.value })
+                      }
+                      placeholder="https://api.openai.com/v1"
+                    />
+                  </label>
+                  <label className="model-field">
+                    模型
+                    <input
+                      value={model.model}
+                      onChange={(event) =>
+                        setModel({ ...model, model: event.target.value })
+                      }
+                      placeholder="模型名"
+                    />
+                  </label>
+                  <label className="model-field">
+                    密钥
+                    <input
+                      value={model.apiKey}
+                      onChange={(event) =>
+                        setModel({ ...model, apiKey: event.target.value })
+                      }
+                      type="password"
+                      placeholder={onPhone ? "必填" : "服务端已接入时可留空"}
+                    />
+                  </label>
+                  <button
+                    onClick={() => {
+                      writeModel(model);
+                      setNotice(
+                        onPhone
+                          ? "模型接口已记在这台手机。"
+                          : "模型接口已记在这台浏览器。",
+                      );
+                    }}
+                  >
+                    记下接口
+                  </button>
+                  <p className="model-hint">
+                    {onPhone
+                      ? "问事要填你自己的接口、模型和密钥，三项都记下才能问。密钥不进星图导出。"
+                      : "开发设置，只保存在这台浏览器。"}
+                  </p>
+                </details>
                 <p>本机</p>
-                <p>模型</p>
-                <label className="model-field">
-                  接口
-                  <input
-                    value={model.baseUrl}
-                    onChange={(event) =>
-                      setModel({ ...model, baseUrl: event.target.value })
-                    }
-                    placeholder="https://api.openai.com/v1"
-                  />
-                </label>
-                <label className="model-field">
-                  模型
-                  <input
-                    value={model.model}
-                    onChange={(event) =>
-                      setModel({ ...model, model: event.target.value })
-                    }
-                    placeholder="模型名"
-                  />
-                </label>
-                <label className="model-field">
-                  密钥
-                  <input
-                    value={model.apiKey}
-                    onChange={(event) =>
-                      setModel({ ...model, apiKey: event.target.value })
-                    }
-                    type="password"
-                    placeholder={onPhone ? "必填" : "留空则用本机 Cursor"}
-                  />
-                </label>
-                <button
-                  onClick={() => {
-                    writeModel(model);
-                    setNotice(
-                      onPhone
-                        ? "模型接口已记在这台手机。"
-                        : "模型接口已记在这台浏览器。",
-                    );
-                  }}
-                >
-                  记下接口
-                </button>
-                <p className="model-hint">
-                  {onPhone
-                    ? "问事要填你自己的接口、模型和密钥，三项都记下才能问。密钥不进星图导出。"
-                    : "给别人用时，他们填自己的接口、模型和密钥。三项都留空，调试就走本机的 Cursor。密钥不进星图导出。"}
-                </p>
                 <button
                   onClick={() => {
                     if (!confirmClear) {

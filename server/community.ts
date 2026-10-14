@@ -143,7 +143,6 @@ export function createCommunity(
     if (!user) throw new ApiError(401, "先留下一个称呼，再把回声送出去。");
     return user;
   }
-  const publicUser = (u: Account) => ({ id: u.id, name: u.name });
   function cookie(res: ServerResponse, token: string, age = 30 * 86400) {
     res.setHeader(
       "set-cookie",

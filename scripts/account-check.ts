@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { Readable } from "node:stream";
-import { createCommunity } from "../server/community.ts";
+import { createCommunity } from "../server/community";
 
 const service = createCommunity(":memory:");
 const person = {

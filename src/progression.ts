@@ -1,12 +1,7 @@
 import { newId } from "./id";
 import type { AppState } from "./store";
-import {
-  ROUND_TURNS,
-  roundStar,
-  starProgress,
-  dailyRoundTurns,
-} from "./galaxy";
-import { senseRound } from "./chat";
+import { roundStar, starProgress, dailyRoundTurns } from "./galaxy";
+import { RITUALS } from "./ritual";
 
 export function finishDailyRound(prev: AppState, now = Date.now()): AppState {
   if (
@@ -17,13 +12,11 @@ export function finishDailyRound(prev: AppState, now = Date.now()): AppState {
     ).allowed
   )
     return prev;
-  const users = prev.messages
-    .filter((message) => message.role === "user")
-    .slice(-ROUND_TURNS);
-  const star = roundStar(
-    users.at(-1)?.text ?? "今天",
-    senseRound(users.map((message) => message.text).join(" ")),
-  );
+  const ritual =
+    RITUALS[
+      prev.stars.filter((s) => s.kind === "round").length % RITUALS.length
+    ];
+  const star = roundStar(ritual.title, { god: "", echo: ritual.prompt });
   return {
     ...prev,
     roundTurns: 0,

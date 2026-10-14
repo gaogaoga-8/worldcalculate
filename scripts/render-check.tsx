@@ -29,10 +29,14 @@ Object.defineProperty(globalThis, "localStorage", {
 });
 const noop = () => {};
 const intake = renderToStaticMarkup(<IntakeChat onDone={noop} />);
-assert.ok(intake.includes('aria-label="填写生日"'));
-assert.ok(intake.includes('aria-label="填写来处"'));
-assert.ok(intake.includes('aria-label="填写名字"'));
+assert.equal((intake.match(/class="intake-star/g) || []).length, 3);
+for (const label of ["生日", "来处", "名字"])
+  assert.ok(intake.includes(`aria-label="填写${label}"`));
 assert.ok(!intake.includes('aria-label="出生年份"'));
+assert.ok(
+  !intake.includes("<select"),
+  "Open only the field the visitor chooses",
+);
 assert.ok(!intake.includes('type="date"'));
 assert.ok(
   !intake.includes('class="choice"'),
@@ -83,17 +87,39 @@ const core = coreStar();
 replaceState(hydrate({ self: person, stars: [core] }));
 const chart = buildChart(person, { ziHour: "early" });
 const sky = renderToStaticMarkup(<SelfSky chart={chart} onHome={noop} />);
-const introduction = renderToStaticMarkup(<SelfSky chart={chart} onHome={noop} forming formationId={1} onSettled={noop} />);
-assert.equal((introduction.match(/<canvas/g) ?? []).length, 1, "Introduction renders the same single sky canvas");
-assert.equal((introduction.match(/cosmos-core/g) ?? []).length, 1, "The animated hero is the actual interactive core");
+const introduction = renderToStaticMarkup(
+  <SelfSky
+    chart={chart}
+    onHome={noop}
+    forming
+    formationId={1}
+    onSettled={noop}
+  />,
+);
+assert.equal(
+  (introduction.match(/<canvas/g) ?? []).length,
+  1,
+  "Introduction renders the same single sky canvas",
+);
+assert.equal(
+  (introduction.match(/cosmos-core/g) ?? []).length,
+  1,
+  "The animated hero is the actual interactive core",
+);
 assert.ok(introduction.includes('aria-label="与本命星对话"'));
 assert.ok(introduction.includes('aria-label="跳过生成动画"'));
 assert.ok(introduction.includes("is-forming"));
-assert.ok(!introduction.includes('class="galaxy '), "No separate fullscreen galaxy replaces the scene");
+assert.ok(
+  !introduction.includes('class="galaxy '),
+  "No separate fullscreen galaxy replaces the scene",
+);
 assert.equal((sky.match(/class="orb dormant"/g) ?? []).length, 7);
 assert.equal((sky.match(/cosmos-core/g) ?? []).length, 1);
 assert.ok(sky.includes('aria-label="与本命星对话"'));
-assert.ok(!sky.includes('aria-label="与本命对话"'), "Dialogue is revealed only after selecting a star");
+assert.ok(
+  !sky.includes('aria-label="与本命对话"'),
+  "Dialogue is revealed only after selecting a star",
+);
 assert.ok(!sky.includes("<line "), "Stars must not have constellation links");
 assert.ok(!sky.includes("star-tabs"), "No toolbar on the main star scene");
 assert.ok(!sky.includes("cosmos-tools"));
@@ -113,7 +139,11 @@ replaceState(
 const later = renderToStaticMarkup(<SelfSky chart={chart} onHome={noop} />);
 assert.equal((later.match(/class="orb dormant"/g) ?? []).length, 6);
 assert.ok(later.includes("今天的故事"));
-assert.equal(storage.get("shijie-suanfa/v1")?.includes("原记录"), true, "Records remain persisted while the default scene is quiet");
+assert.equal(
+  storage.get("shijie-suanfa/v1")?.includes("原记录"),
+  true,
+  "Records remain persisted while the default scene is quiet",
+);
 assert.ok(!later.includes("再完成"));
 console.log(
   "Server-rendered onboarding, date options, progressive place selectors, one lit core, dormant stars, dialogue and retained records: passed.",
@@ -136,3 +166,10 @@ assert.deepEqual(
 );
 assert.equal(prompt[1].content, "前一个问题");
 assert.equal(prompt[2].content, "之前的回答");
+assert.equal(prompt.at(-1)?.content, "继续");
+assert.ok(prompt[0].content.includes("普通情绪聊天不要提日主"));
+assert.ok(!prompt[0].content.includes("精准直断"));
+assert.ok(
+  !prompt[0].content.includes("2000"),
+  "Exact birth date is not needed for emotional conversation",
+);
