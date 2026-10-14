@@ -16,6 +16,9 @@ import { oracleMessages, palaceMessages } from "../oracle/prompt";
 import { scoreQuiz } from "../mbti";
 import { updateState, useAppState } from "../store";
 import { igniteFate, recedeOpening } from "../bgm";
+import { settleBond } from "../moli/emotion";
+import { closeReach } from "../moli/reach";
+import { settleMood } from "../presence";
 import { finishDailyRound } from "../progression";
 import { ChartView } from "./ChartView";
 import { ChatView } from "./ChatView";
@@ -32,7 +35,7 @@ export function SelfSky({
   onSettled,
 }: {
   chart: Chart;
-  onHome: () => void;
+  onHome: (draft?: string) => void;
   forming?: boolean;
   formationId?: number;
   onSettled?: () => void;
@@ -123,6 +126,19 @@ export function SelfSky({
   }, [surfaceOpen]);
   const conjTimer = useRef(0);
   const charged = rounds.length >= 1 && !state.conjunctionAt && !conjuring;
+  const reaching =
+    !forming &&
+    !charged &&
+    !conjuring &&
+    modal !== "chat" &&
+    !!closeReach({
+      now,
+      messages: state.messages,
+      memories: state.memories,
+      mood: settleMood(state.mood, now),
+      reachedAt: state.reachedAt,
+      bond: settleBond(state.bond, now),
+    });
   const conjunctionAsk = !!state.conjunctionAt && !state.conjunctionAsked;
   function openCore() {
     if (rounds.length >= 1 && !state.conjunctionAt && !conjuring) {
@@ -240,7 +256,7 @@ export function SelfSky({
   }
   return (
     <section className="star-world" aria-label="我的星系">
-      <div className={`star-scene${forming ? " is-forming" : ""}${modal === "chat" ? " is-talking" : ""}${charged ? " is-charged" : ""}${conjuring ? " is-conjuring" : ""}`}>
+      <div className={`star-scene${forming ? " is-forming" : ""}${modal === "chat" ? " is-talking" : ""}${charged ? " is-charged" : ""}${conjuring ? " is-conjuring" : ""}${reaching ? " is-reaching" : ""}`}>
         <Nebula
           formationId={formationId}
           forming={forming}
@@ -347,7 +363,7 @@ export function SelfSky({
           disabled={forming}
           className="world-object"
           aria-label="世界与连接"
-          onClick={onHome}
+          onClick={() => onHome()}
         >
           <i />
           <span>世界</span>
@@ -519,6 +535,30 @@ export function SelfSky({
                         <button type="submit" className="ghost">
                           记下
                         </button>
+                        <button
+                          type="button"
+                          className="text-action"
+                          onClick={(event) => {
+                            const form = event.currentTarget.form;
+                            const note = String(
+                              form ? new FormData(form).get("note") || "" : "",
+                            ).trim();
+                            if (!note) {
+                              form?.querySelector("input")?.focus();
+                              return;
+                            }
+                            updateState((prev) => ({
+                              ...prev,
+                              stars: prev.stars.map((s) =>
+                                s.id === active.id ? { ...s, note } : s,
+                              ),
+                            }));
+                            setModal(null);
+                            onHome(note);
+                          }}
+                        >
+                          送到世界 ↗
+                        </button>
                       </form>
                     </details>
                   )}
@@ -526,6 +566,7 @@ export function SelfSky({
                     chart={voiced}
                     embedded
                     minimal
+                    presence={active?.kind === "core"}
                     starName={active?.title ?? "本命"}
                   />
                 </div>

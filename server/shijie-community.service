@@ -1,0 +1,15 @@
+[Unit]
+Description=Shijie Suanfa echo community
+After=network.target
+
+[Service]
+ExecStart=/opt/node-v24/bin/node /opt/shijie-suanfa/community-host.mjs
+Restart=on-failure
+User=www-data
+Environment=PORT=4174
+Environment=COMMUNITY_DB=/var/lib/shijie-suanfa/community.sqlite
+Environment=APP_ORIGIN=http://8.218.96.229
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

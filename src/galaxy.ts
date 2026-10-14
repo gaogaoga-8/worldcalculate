@@ -1,3 +1,5 @@
+import { newId } from "./id";
+
 export const ROUND_TURNS = 2;
 
 export const MIRROR_AT = 7;
@@ -146,7 +148,7 @@ export function isCardPlace(value: unknown): value is CardPlace {
 
 export function palaceStars(now = Date.now()): LitStar[] {
   return PALACES.map((palace) => ({
-    id: crypto.randomUUID(),
+    id: newId(),
     kind: "palace" as const,
     title: palace.title,
     note: "",
@@ -164,7 +166,7 @@ export function ensurePalaces(stars: LitStar[], now = Date.now()): LitStar[] {
   return [
     ...stars,
     ...missing.map((palace) => ({
-      id: crypto.randomUUID(),
+      id: newId(),
       kind: "palace" as const,
       title: palace.title,
       note: "",
@@ -179,7 +181,7 @@ export function ensurePalaces(stars: LitStar[], now = Date.now()): LitStar[] {
 
 export function coreStar(title = "本命"): LitStar {
   return {
-    id: crypto.randomUUID(),
+    id: newId(),
     kind: "core",
     title,
     note: "",
@@ -195,7 +197,7 @@ export function roundStar(
 ): LitStar {
   const clean = title.replace(/\s+/g, " ").trim().slice(0, 18) || "这一轮";
   return {
-    id: crypto.randomUUID(),
+    id: newId(),
     kind: "round",
     title: clean,
     note: "",

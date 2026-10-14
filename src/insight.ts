@@ -52,7 +52,7 @@ export function askBond(text: string, stars: LitStar[], chart: Chart, links: Sta
   const named = links.find((link) => text.includes(link.name));
   if (!named) {
     const names = links.map((link) => link.name);
-    return { text: names.length ? `说的是哪一个已经互换的好友？现在有 ${names.join("、")}。` : "还没有互换过的好友。到地球上连一个人，再问你们的关系。", ids: [] };
+    return { text: names.length ? `说的是哪一个已经互换的好友？现在有 ${names.join("、")}。` : "还没有互换过的好友。", ids: [] };
   }
   const done = stars.filter(formed);
   const structure = relate(chart, named);

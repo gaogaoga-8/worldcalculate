@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { saveAccount, startAccountSync } from "./account";
 import { buildChart } from "./bazi/chart";
 import { ConnectMap } from "./components/ConnectMap";
 import { SelfSky } from "./components/SelfSky";
@@ -6,7 +7,8 @@ import { IntakeChat } from "./components/IntakeChat";
 import { Shell, type ViewId } from "./components/Shell";
 import { beginOpening } from "./bgm";
 import { coreStar, palaceStars } from "./galaxy";
-import { updateState, useAppState } from "./store";
+import { getState, updateState, useAppState } from "./store";
+import { newId } from "./id";
 import type { Person } from "./types";
 import "./styles.css";
 
@@ -31,6 +33,9 @@ export function App() {
   const [previewOpening] = useState(() => Boolean(state.self) && openingPreviewPending());
   const [view, setView] = useState<ViewId>("self");
   const [formationId, setFormationId] = useState(0);
+  const [echoDraft, setEchoDraft] = useState("");
+  const [booting, setBooting] = useState(() => !state.self);
+  const settled = useRef(false);
 
   function replay() {
     setView("self");
@@ -41,6 +46,21 @@ export function App() {
   useEffect(() => {
     if (!state.self && phase === "desk") setPhase("intake");
   }, [state.self, phase]);
+
+  useEffect(() => {
+    let live = true;
+    void startAccountSync().finally(() => {
+      if (!live) return;
+      setBooting(false);
+      if (settled.current) return;
+      settled.current = true;
+      if (!getState().self) return;
+      setPhase(openingPreviewPending() ? "galaxy" : "desk");
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!previewOpening || phase !== "galaxy") return;
@@ -69,17 +89,19 @@ export function App() {
   }, [state.self, state.settings.ziHour]);
 
   function commit(person: Person) {
+    const kind = state.self ? "edit" : "open";
     if (!state.self) void beginOpening();
     updateState((prev) => ({
       ...prev,
       self: { ...person, id: "self" },
-      galaxyId: prev.galaxyId || crypto.randomUUID(),
+      galaxyId: prev.galaxyId || newId(),
       stars: prev.self ? prev.stars : [coreStar("本命"), ...palaceStars()],
       roundTurns: prev.self ? prev.roundTurns : 0,
       messages: prev.self ? prev.messages : [],
       mirror: prev.self ? prev.mirror : null,
       plans: prev.plans,
     }));
+    void saveAccount(person, kind).catch(() => {});
     replay();
   }
 
@@ -96,16 +118,26 @@ export function App() {
           {view === "self" && (
             <SelfSky
               chart={chart}
-              onHome={() => setView("connect")}
+              onHome={(draft = "") => {
+                setEchoDraft(draft);
+                setView("connect");
+              }}
               forming={phase === "galaxy"}
               formationId={formationId}
               onSettled={() => setPhase("desk")}
             />
           )}
           {view === "connect" && (
-            <ConnectMap chart={chart} onOpenSelf={() => setView("self")} />
+            <ConnectMap
+              chart={chart}
+              draft={echoDraft}
+              onDraftUsed={() => setEchoDraft("")}
+              onOpenSelf={() => setView("self")}
+            />
           )}
         </>
+      ) : booting ? (
+        <div className="boot-sky" />
       ) : (
         <IntakeChat
           onDone={commit}

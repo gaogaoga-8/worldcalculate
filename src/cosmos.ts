@@ -1,5 +1,11 @@
 export const FORMATION_MS = 7600;
 
+export const INPUT_STARS = [
+  { id: "birth", x: 0.32, y: 0.4 },
+  { id: "place", x: 0.65, y: 0.32 },
+  { id: "name", x: 0.6, y: 0.64 },
+] as const;
+
 export const mix = (from: number, to: number, amount: number) =>
   from + (to - from) * amount;
 export function easeBetween(value: number, from: number, to: number) {

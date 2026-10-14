@@ -1,0 +1,13 @@
+[Unit]
+Description=Shijie Suanfa oracle relay
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/node /opt/shijie-suanfa/public-host.mjs
+Restart=on-failure
+User=www-data
+Environment=PORT=4173
+EnvironmentFile=/etc/shijie-suanfa.env
+
+[Install]
+WantedBy=multi-user.target

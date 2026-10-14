@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { newId } from "../id";
 import type { Gender, Person } from "../types";
 import {
   BirthFields,
@@ -47,7 +48,7 @@ export function PersonForm({
     }
     setError("");
     onSubmit({
-      id: crypto.randomUUID(),
+      id: newId(),
       name: name.trim() || "未名",
       gender,
       time: {

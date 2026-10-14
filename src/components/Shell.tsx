@@ -17,6 +17,7 @@ import {
   useAppState,
   type AppState,
 } from "../store";
+import { restoreAccount, restoreKey, saveAccount } from "../account";
 import { musicOn, subscribeMusic, toggleMusic } from "../bgm";
 import { readModel, writeModel, type ModelLink } from "../oracle/settings";
 
@@ -239,6 +240,7 @@ function exportJson() {
       JSON.stringify(
         {
           version: 1,
+          restoreKey: restoreKey(),
           state: JSON.parse(localStorage.getItem("shijie-suanfa/v1") || "{}")
             .state,
         },
@@ -267,6 +269,7 @@ async function importJson(
   try {
     const data = JSON.parse(await file.text()) as {
       version?: number;
+      restoreKey?: string;
       state?: AppState;
     };
     if (
@@ -280,9 +283,12 @@ async function importJson(
     const people = Array.isArray(data.state.people)
       ? data.state.people.filter(isPerson)
       : [];
+    const key = data.restoreKey?.trim();
+    const restored = key ? await restoreAccount(key).then(() => true).catch(() => false) : false;
     replaceState(
       hydrate({ ...data.state, self: data.state.self ?? null, people }),
     );
+    if (!restored && data.state.self) await saveAccount(data.state.self, "import").catch(() => {});
     setNotice("已导入。");
   } catch {
     setNotice("这个文件读不了。");

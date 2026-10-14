@@ -1,3 +1,4 @@
+import { newId } from "./id";
 import type { AppState } from "./store";
 import {
   ROUND_TURNS,
@@ -30,7 +31,7 @@ export function finishDailyRound(prev: AppState, now = Date.now()): AppState {
     messages: [
       ...prev.messages,
       {
-        id: crypto.randomUUID(),
+        id: newId(),
         role: "guide",
         text: "新的星，已经点亮。",
         at: now,

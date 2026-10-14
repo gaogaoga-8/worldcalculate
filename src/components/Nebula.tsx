@@ -1,4 +1,5 @@
 import { useEffect, useRef, type RefObject } from "react";
+import { newId } from "../id";
 import {
   dustPosition,
   easeBetween,
@@ -35,7 +36,7 @@ export function Nebula({
     const canvas = ref.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
-    canvas.dataset.sceneId = crypto.randomUUID();
+    canvas.dataset.sceneId = newId();
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
     let reduced = media.matches;
     let raf = 0,

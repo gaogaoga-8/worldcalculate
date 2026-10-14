@@ -29,9 +29,10 @@ Object.defineProperty(globalThis, "localStorage", {
 });
 const noop = () => {};
 const intake = renderToStaticMarkup(<IntakeChat onDone={noop} />);
-assert.ok(intake.includes('aria-label="出生年份"'));
-assert.ok(intake.includes('aria-label="出生小时"'));
-assert.ok(intake.includes('aria-label="出生分钟"'));
+assert.ok(intake.includes('aria-label="填写生日"'));
+assert.ok(intake.includes('aria-label="填写来处"'));
+assert.ok(intake.includes('aria-label="填写名字"'));
+assert.ok(!intake.includes('aria-label="出生年份"'));
 assert.ok(!intake.includes('type="date"'));
 assert.ok(
   !intake.includes('class="choice"'),

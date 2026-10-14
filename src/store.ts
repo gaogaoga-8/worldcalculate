@@ -1,9 +1,12 @@
 import { useSyncExternalStore } from "react";
 import { coreStar, ensurePalaces, isCardPlace, type LitStar, type PlanMark, type StarLink } from "./galaxy";
+import { newId } from "./id";
 import type { QuizAnswers } from "./mbti";
+import { REST_BOND, isBond, type Bond } from "./moli/emotion";
+import { REST_MOOD, rememberAll, type MemoryNote, type Mood } from "./presence";
 import type { Person } from "./types";
 
-export type ChatMessage = { id: string; role: "user" | "guide"; text: string; at?: number };
+export type ChatMessage = { id: string; role: "user" | "guide"; text: string; at?: number; reach?: boolean };
 
 export type Settings = { ziHour: "early" | "late" };
 
@@ -23,6 +26,10 @@ export type AppState = {
   settings: Settings;
   conjunctionAt: number | null;
   conjunctionAsked: boolean;
+  memories: MemoryNote[];
+  mood: Mood;
+  bond: Bond;
+  reachedAt: number | null;
 };
 
 const KEY = "shijie-suanfa/v1";
@@ -46,6 +53,10 @@ const initial: AppState = {
   settings: { ziHour: "early" },
   conjunctionAt: null,
   conjunctionAsked: false,
+  memories: [],
+  mood: { ...REST_MOOD },
+  bond: { ...REST_BOND },
+  reachedAt: null,
 };
 
 let state = load();
@@ -74,8 +85,29 @@ function load(): AppState {
   }
 }
 
+const savers = new Set<(next: AppState) => void>();
+let quiet = false;
+
+export function onSave(listener: (next: AppState) => void) {
+  savers.add(listener);
+  return () => savers.delete(listener);
+}
+
+export function quietly(run: () => void) {
+  quiet = true;
+  try {
+    run();
+  } finally {
+    quiet = false;
+  }
+}
+
 function emit() {
   localStorage.setItem(KEY, JSON.stringify({ version: 1, state }));
+  if (!quiet) {
+    localStorage.setItem("shijie-suanfa/dirty", "1");
+    savers.forEach((listener) => listener(state));
+  }
   listeners.forEach((listener) => listener());
 }
 
@@ -110,7 +142,7 @@ export function hydrate(raw: Partial<AppState>): AppState {
     ...initial,
     ...raw,
     self,
-    galaxyId: typeof raw.galaxyId === "string" && raw.galaxyId ? raw.galaxyId : self ? crypto.randomUUID() : "",
+    galaxyId: typeof raw.galaxyId === "string" && raw.galaxyId ? raw.galaxyId : self ? newId() : "",
     stars: sky,
     links,
     roundTurns: typeof raw.roundTurns === "number" ? raw.roundTurns : 0,
@@ -123,11 +155,17 @@ export function hydrate(raw: Partial<AppState>): AppState {
     settings: { ...initial.settings, ...raw.settings },
     conjunctionAt: typeof raw.conjunctionAt === "number" ? raw.conjunctionAt : null,
     conjunctionAsked: raw.conjunctionAsked === true,
+    memories: Array.isArray(raw.memories)
+      ? raw.memories.filter(isMemory).slice(-18)
+      : rememberAll([], Array.isArray(raw.messages) ? raw.messages : []),
+    mood: isMood(raw.mood) ? raw.mood : { ...REST_MOOD },
+    bond: isBond(raw.bond) ? raw.bond : { ...REST_BOND },
+    reachedAt: typeof raw.reachedAt === "number" ? raw.reachedAt : null,
   };
 }
 
 export function resetState() {
-  const hasRecords = state.self || state.stars.length || state.messages.length || state.links.length || state.people.length || state.quiz || state.plans.length || state.branchMessages.length;
+  const hasRecords = state.self || state.stars.length || state.messages.length || state.links.length || state.people.length || state.quiz || state.plans.length || state.branchMessages.length || state.memories.length;
   if (hasRecords) {
     // Save recovery data first. If storage is unavailable, keep the current records.
     localStorage.setItem(RESET_BACKUP_KEY, JSON.stringify({ version: 1, state, resetAt: Date.now() }));
@@ -189,6 +227,18 @@ function normalizeLink(link: StarLink): StarLink {
     exchanges: exchanges.length ? exchanges : [link.at || Date.now()],
     at: link.at || exchanges[0] || Date.now(),
   };
+}
+
+function isMemory(value: unknown): value is MemoryNote {
+  if (!value || typeof value !== "object") return false;
+  const note = value as MemoryNote;
+  return typeof note.id === "string" && typeof note.text === "string" && typeof note.at === "number";
+}
+
+function isMood(value: unknown): value is Mood {
+  if (!value || typeof value !== "object") return false;
+  const mood = value as Mood;
+  return [mood.near, mood.sting, mood.worry, mood.lift, mood.at].every((item) => typeof item === "number");
 }
 
 function isPlan(value: unknown): value is PlanMark {

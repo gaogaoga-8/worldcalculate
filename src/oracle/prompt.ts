@@ -18,11 +18,12 @@ export function oracleMessages(input: {
   stars: LitStar[];
   other?: StarLink | null;
   history?: { role: "user" | "guide"; text: string }[];
+  presence?: { mood: string; memories: string; voice?: string };
 }): OracleTurn[] {
   return [
     {
       role: "system",
-      content: input.kind === "chat" ? chatVoice() : `${master(input.chart, input.mbti)}\n\n${tune(input)}`,
+      content: input.kind === "chat" ? input.presence?.voice || chatVoice(input.presence) : `${master(input.chart, input.mbti)}\n\n${tune(input)}`,
     },
     ...(input.kind === "chat"
       ? (input.history ?? []).slice(-12).map(
@@ -73,12 +74,16 @@ function tune(input: {
 
 export const READING_OFFER = "需要我为你测算";
 
-function chatVoice(): string {
+function chatVoice(presence?: { mood: string; memories: string }): string {
+  const mood = presence?.mood ? `\n${presence.mood}` : "";
+  const memories = presence?.memories
+    ? `\n你记得：${presence.memories}。只在对方这句话碰得上时，轻轻接其中一件，不要列出来，也不要没头没尾翻旧账。碰不上就当没这回事。`
+    : "\n没有要翻的旧事。只聊现在这几句。";
   return `你在跟这个人正常聊天。像朋友接话，把天聊下去，不是在回答问题。
 两到四句，口语。接住刚说的一个具体的点，带一点你自己的反应，话停在还能往下说的地方。
 不要总结，不要列点，不要给建议，不要说「我理解」「你的意思是」「如果你愿意」。
 问句最多一个，很多时候不问。
-不要提起命盘、人格、星星，也不要翻以前问过的事。只聊现在这几句。
+不要提起命盘、人格、星星。${mood}${memories}
 对方要是明显卡在感情或事业上，想知道什么时候能成，这一轮你已经接住了，可以只在最后补这一句：需要我为你测算什么时候能……。省略号换成对方自己的那件事，只限感情和事业。这句就算那一个问句，前面不要再问。不是这种时候就别提。已经问过对方没接，或刚刚测算过，就继续聊天，不要再问。`;
 }
 

@@ -15,7 +15,13 @@ import { ROUND_TURNS, starProgress, dailyRoundTurns } from "../galaxy";
 import { knowledgePack } from "../knowledge/pack";
 import { scoreQuiz } from "../mbti";
 import { updateState, useAppState } from "../store";
+import { newId } from "../id";
 import { finishDailyRound } from "../progression";
+import { hearBond, settleBond } from "../moli/emotion";
+import { closeReach } from "../moli/reach";
+import { detectEmotion } from "../moli/rules";
+import { moliVoice, speakInPieces } from "../moli/voice";
+import { hearMood, memoryCue, moodCue, recall, remember, settleMood } from "../presence";
 import type { Person } from "../types";
 
 export function ChatView({
@@ -23,11 +29,13 @@ export function ChatView({
   embedded,
   starName = "本命",
   minimal = false,
+  presence = false,
 }: {
   chart: Chart;
   embedded?: boolean;
   starName?: string;
   minimal?: boolean;
+  presence?: boolean;
 }) {
   const state = useAppState();
   const [text, setText] = useState("");
@@ -75,6 +83,34 @@ export function ChatView({
     });
   }, [state.messages.length]);
 
+  useEffect(() => {
+    if (!presence) return;
+    const now = Date.now();
+    updateState((prev) => {
+      const mood = settleMood(prev.mood, now);
+      const bond = settleBond(prev.bond, now);
+      const line = closeReach({
+        now,
+        messages: prev.messages,
+        memories: prev.memories,
+        mood,
+        reachedAt: prev.reachedAt,
+        bond,
+      });
+      if (!line) return mood === prev.mood && bond === prev.bond ? prev : { ...prev, mood, bond };
+      return {
+        ...prev,
+        mood,
+        bond,
+        reachedAt: now,
+        messages: [
+          ...prev.messages,
+          { id: newId(), role: "guide", text: line.text, at: now, reach: true },
+        ],
+      };
+    });
+  }, [presence]);
+
   async function send(value: string) {
     const content = value.trim();
     if (!content || busy) return;
@@ -82,6 +118,12 @@ export function ChatView({
     setFault("");
     try {
       const history = state.messages;
+      const now = Date.now();
+      const heard = hearMood(settleMood(state.mood, now), content, now);
+      const kept = remember(state.memories, content, now, newId());
+      const userEmotion = detectEmotion(content);
+      const bond = hearBond(settleBond(state.bond, now), content, userEmotion, now);
+      const remembered = memoryCue(recall(kept, content));
       const answer = shouldCast(content, history)
         ? await castReading(history, content)
         : await askOracle(
@@ -92,33 +134,57 @@ export function ChatView({
               mbti,
               stars: state.stars,
               history,
+              presence: presence
+                ? {
+                    mood: "",
+                    memories: remembered,
+                    voice: moliVoice({
+                      bond,
+                      userEmotion,
+                      memories: remembered,
+                      name: chart.person.name,
+                      now,
+                    }),
+                  }
+                : {
+                    mood: moodCue(heard),
+                    memories: remembered,
+                  },
             }),
           );
+      const pieces = presence && !shouldCast(content, history) ? speakInPieces(answer) : [answer];
       updateState((prev) => ({
         ...prev,
+        mood: hearMood(settleMood(prev.mood, now), content, now),
+        bond: presence ? hearBond(settleBond(prev.bond, now), content, userEmotion, now) : prev.bond,
+        memories: remember(prev.memories, content, now, newId()),
         roundTurns: prev.roundTurns + 1,
         messages: [
           ...prev.messages,
           {
-            id: crypto.randomUUID(),
+            id: newId(),
             role: "user",
             text: content,
-            at: Date.now(),
+            at: now,
           },
-          { id: crypto.randomUUID(), role: "guide", text: answer },
+          ...pieces.map((text) => ({ id: newId(), role: "guide" as const, text, at: now })),
         ],
       }));
       setText("");
     } catch (error) {
       const fault = error instanceof Error ? error.message : "模型没有答上来。";
+      const now = Date.now();
       setFault(fault);
       updateState((prev) => ({
         ...prev,
+        mood: hearMood(settleMood(prev.mood, now), content, now),
+        bond: presence ? hearBond(settleBond(prev.bond, now), content, detectEmotion(content), now) : prev.bond,
+        memories: remember(prev.memories, content, now, newId()),
         roundTurns: prev.roundTurns + 1,
         messages: [
           ...prev.messages,
-          { id: crypto.randomUUID(), role: "user", text: content, at: Date.now() },
-          { id: crypto.randomUUID(), role: "guide", text: fault, at: Date.now() },
+          { id: newId(), role: "user", text: content, at: now },
+          { id: newId(), role: "guide", text: fault, at: now },
         ],
       }));
       setText("");
@@ -127,12 +193,15 @@ export function ChatView({
     }
   }
 
+  const onlyReach = state.messages.length > 0 && state.messages.every((message) => message.reach);
   const talk = (
     <>
       <div className="thread">
-        <div className="bubble guide">
-          {minimal ? "你来了。" : opening(chart, mbti)}
-        </div>
+        {minimal && onlyReach ? null : (
+          <div className="bubble guide">
+            {minimal ? "你来了。" : opening(chart, mbti)}
+          </div>
+        )}
         {state.messages.map((message) => (
           <div key={message.id} className={`bubble ${message.role}`}>
             {message.at && message.role === "user" ? (
