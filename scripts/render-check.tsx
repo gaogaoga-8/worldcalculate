@@ -167,7 +167,7 @@ assert.deepEqual(
 assert.equal(prompt[1].content, "前一个问题");
 assert.equal(prompt[2].content, "之前的回答");
 assert.equal(prompt.at(-1)?.content, "继续");
-assert.ok(prompt[0].content.includes("普通情绪聊天不要提日主"));
+assert.ok(prompt[0].content.includes("不要提起命盘、人格、星星"));
 assert.ok(!prompt[0].content.includes("精准直断"));
 assert.ok(
   !prompt[0].content.includes("2000"),
