@@ -8,6 +8,16 @@ import type { Person } from "./types";
 
 export type ChatMessage = { id: string; role: "user" | "guide"; text: string; at?: number; reach?: boolean };
 
+export type AskRecord = {
+  id: string;
+  kind: "thing" | "feeling" | "bond";
+  question: string;
+  answer: string;
+  at: number;
+  whose: "self" | "named";
+  subjectName: string;
+};
+
 export type Settings = { ziHour: "early" | "late" };
 
 export type AppState = {
@@ -20,6 +30,7 @@ export type AppState = {
   quiz: QuizAnswers | null;
   personaSource: "typed" | "quiz" | null;
   messages: ChatMessage[];
+  asks: AskRecord[];
   branchMessages: ChatMessage[];
   mirror: string | null;
   plans: PlanMark[];
@@ -47,6 +58,7 @@ const initial: AppState = {
   quiz: null,
   personaSource: null,
   messages: [],
+  asks: [],
   branchMessages: [],
   mirror: null,
   plans: [],
@@ -146,8 +158,9 @@ export function hydrate(raw: Partial<AppState>): AppState {
     stars: sky,
     links,
     roundTurns: typeof raw.roundTurns === "number" ? raw.roundTurns : 0,
-    people: Array.isArray(raw.people) ? raw.people : [],
+    people: Array.isArray(raw.people) ? raw.people.filter(isPerson) : [],
     messages: Array.isArray(raw.messages) ? raw.messages : [],
+    asks: Array.isArray(raw.asks) ? raw.asks.filter(isAsk).slice(-40) : [],
     branchMessages: Array.isArray(raw.branchMessages) ? raw.branchMessages : [],
     mirror: typeof raw.mirror === "string" ? raw.mirror : null,
     plans: Array.isArray(raw.plans) ? raw.plans.filter(isPlan) : [],
@@ -256,6 +269,16 @@ export function useAppState(): AppState {
     getState,
     getState,
   );
+}
+
+function isAsk(value: unknown): value is AskRecord {
+  if (!value || typeof value !== "object") return false;
+  const ask = value as AskRecord;
+  return typeof ask.id === "string"
+    && (ask.kind === "thing" || ask.kind === "feeling" || ask.kind === "bond")
+    && typeof ask.question === "string"
+    && typeof ask.answer === "string"
+    && typeof ask.at === "number";
 }
 
 export function isPerson(value: unknown): value is Person {

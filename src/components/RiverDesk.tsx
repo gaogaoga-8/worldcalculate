@@ -5,8 +5,10 @@ import { ensurePalaces, coreStar, formed } from "../galaxy";
 import { askOracle } from "../oracle/client";
 import { oracleMessages, plainReading, readingChart, type OracleKind } from "../oracle/prompt";
 import { scoreQuiz } from "../mbti";
+import { newId } from "../id";
 import { updateState, useAppState } from "../store";
 import { PersonaView } from "./PersonaView";
+import { PersonForm } from "./PersonForm";
 import { WaitStar } from "./WaitStar";
 
 export function RiverDesk({
@@ -28,6 +30,7 @@ export function RiverDesk({
   const [question, setQuestion] = useState("");
   const [oracle, setOracle] = useState("");
   const [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState(false);
   const mbti = scoreQuiz(state.quiz)?.type ?? chart.person.mbti ?? null;
   const voiced = { ...chart, person: { ...chart.person, mbti } };
   const conjunctionAsk = !!state.conjunctionAt && !state.conjunctionAsked;
@@ -54,15 +57,31 @@ export function RiverDesk({
     setBusy(true);
     setOracle("");
     try {
-      setOracle(plainReading(await askOracle(oracleMessages({
-        kind: ask,
+    const whose = subject.person.id === voiced.person.id ? "self" as const : "named" as const;
+    const answer = plainReading(await askOracle(oracleMessages({
+      kind: ask,
+      question: text,
+      chart: subject,
+      mbti,
+      stars: state.stars,
+      whose,
+    })));
+    const kind: "thing" | "feeling" | "bond" = ask === "feeling" || ask === "bond" ? ask : "thing";
+    updateState((prev) => ({
+      ...prev,
+      conjunctionAsked: granted ? true : prev.conjunctionAsked,
+      asks: [...prev.asks, {
+        id: newId(),
+        kind,
         question: text,
-        chart: subject,
-        mbti,
-        stars: state.stars,
-        whose: subject.person.id === voiced.person.id ? "self" : "named",
-      }))));
-      if (granted) updateState((prev) => ({ ...prev, conjunctionAsked: true }));
+        answer,
+        at: Date.now(),
+        whose,
+        subjectName: subject.person.name,
+      }].slice(-40),
+    }));
+    setQuestion("");
+    setOracle("");
     } catch (error) {
       setOracle(error instanceof Error ? error.message : "模型没有答上来。");
     } finally {
@@ -82,6 +101,24 @@ export function RiverDesk({
         ))}
       </div>
       {conjunctionAsk && <p className="sub">七星连珠。问一件事。</p>}
+      {ask === "bond" && (
+        <div className="people-line">
+          {state.people.map((person) => (
+            <span key={person.id}>{person.name}</span>
+          ))}
+          <button type="button" onClick={() => setAdding((open) => !open)}>{adding ? "收起" : "加一个人"}</button>
+        </div>
+      )}
+      {ask === "bond" && adding && (
+        <PersonForm
+          requireName
+          submitLabel="记下"
+          onSubmit={(person) => {
+            updateState((prev) => ({ ...prev, people: [...prev.people, person].slice(0, 40) }));
+            setAdding(false);
+          }}
+        />
+      )}
       {busy ? <WaitStar pace="ask" /> : (
         <form onSubmit={submitAsk}>
           <input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder={ask === "bond" ? "好友的名字，以及想问的事…" : "你想问什么…"} required />
@@ -89,6 +126,16 @@ export function RiverDesk({
         </form>
       )}
       {oracle && !busy && <p className="bubble guide">{oracle}</p>}
+      {state.asks.length > 0 && (
+        <div className="ask-log">
+          {state.asks.map((item) => (
+            <div key={item.id}>
+              <p className="q">{item.whose === "named" && item.subjectName ? `${item.subjectName} · ` : ""}{item.question}</p>
+              <p className="bubble guide">{item.answer}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 

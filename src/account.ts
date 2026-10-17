@@ -24,6 +24,8 @@ type Sky = {
   stars: AppState["stars"];
   messages: AppState["messages"];
   memories: AppState["memories"];
+  asks: AppState["asks"];
+  people: AppState["people"];
   mood: Mood | null;
   bond: Bond | null;
   reachedAt: number | null;
@@ -171,6 +173,8 @@ async function pullSky() {
         stars: sky.stars,
         messages: sky.messages,
         memories: sky.memories,
+        asks: Array.isArray(sky.asks) ? sky.asks : local.asks,
+        people: Array.isArray(sky.people) ? sky.people.filter(isPerson) : local.people,
         mood: sky.mood || local.mood,
         bond: sky.bond || local.bond,
         reachedAt: sky.reachedAt,
@@ -213,6 +217,8 @@ function skyBody(state: AppState) {
     stars: state.stars,
     messages: state.messages.slice(-300),
     memories: state.memories,
+    asks: state.asks.slice(-40),
+    people: state.people.filter(isPerson).slice(0, 40),
     mood: state.mood,
     bond: state.bond,
     reachedAt: state.reachedAt,

@@ -115,6 +115,33 @@ export function createCommunity(
       at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS events_user ON events(user_id, at);
+    CREATE TABLE IF NOT EXISTS asks(
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      kind TEXT NOT NULL,
+      question TEXT NOT NULL,
+      answer TEXT NOT NULL,
+      whose TEXT,
+      subject_name TEXT,
+      at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS people(
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      name TEXT NOT NULL,
+      gender TEXT,
+      birth_year INTEGER,
+      birth_month INTEGER,
+      birth_day INTEGER,
+      birth_hour INTEGER,
+      birth_minute INTEGER,
+      hour_unknown INTEGER NOT NULL DEFAULT 0,
+      place_name TEXT,
+      longitude REAL,
+      latitude REAL,
+      timezone REAL,
+      mbti TEXT
+    );
   `);
   const moodColumns = db.prepare("PRAGMA table_info(moods)").all() as { name: string }[];
   if (!moodColumns.some((column) => column.name === "bond")) db.exec("ALTER TABLE moods ADD COLUMN bond TEXT");
@@ -258,6 +285,8 @@ export function createCommunity(
     const stars = db.prepare("SELECT * FROM stars WHERE user_id=?").all(userId) as Record<string, unknown>[];
     const messages = db.prepare("SELECT * FROM chat_messages WHERE user_id=? ORDER BY seq").all(userId) as Record<string, unknown>[];
     const memories = db.prepare("SELECT id, text, at FROM memories WHERE user_id=? ORDER BY at").all(userId);
+    const asks = db.prepare("SELECT * FROM asks WHERE user_id=? ORDER BY at").all(userId) as Record<string, unknown>[];
+    const people = db.prepare("SELECT * FROM people WHERE user_id=?").all(userId) as Record<string, unknown>[];
     const mood = db.prepare("SELECT * FROM moods WHERE user_id=?").get(userId) as Record<string, unknown> | undefined;
     return {
       updatedAt: row.updated_at || 0,
@@ -305,6 +334,35 @@ export function createCommunity(
         reach: message.reach === 1,
       })),
       memories,
+      asks: asks.map((ask) => ({
+        id: ask.id,
+        kind: ask.kind === "feeling" || ask.kind === "bond" ? ask.kind : "thing",
+        question: ask.question,
+        answer: ask.answer,
+        at: ask.at,
+        whose: ask.whose === "named" ? "named" : "self",
+        subjectName: ask.subject_name || "",
+      })),
+      people: people.map((person) => ({
+        id: person.id,
+        name: person.name,
+        gender: person.gender === "female" ? "female" : "male",
+        time: {
+          year: person.birth_year,
+          month: person.birth_month,
+          day: person.birth_day,
+          hour: person.hour_unknown ? null : person.birth_hour,
+          minute: person.birth_minute || 0,
+        },
+        place: {
+          name: person.place_name || "",
+          longitude: person.longitude || 0,
+          latitude: person.latitude || 0,
+          timezone: person.timezone || 8,
+        },
+        hourUnknown: person.hour_unknown === 1,
+        mbti: person.mbti,
+      })),
       mood: mood
         ? { near: Number(mood.near), sting: Number(mood.sting), worry: Number(mood.worry), lift: Number(mood.lift), at: Number(mood.at) }
         : null,
@@ -321,6 +379,8 @@ export function createCommunity(
       db.prepare("DELETE FROM stars WHERE user_id=?").run(userId);
       db.prepare("DELETE FROM chat_messages WHERE user_id=?").run(userId);
       db.prepare("DELETE FROM memories WHERE user_id=?").run(userId);
+      db.prepare("DELETE FROM asks WHERE user_id=?").run(userId);
+      db.prepare("DELETE FROM people WHERE user_id=?").run(userId);
       const insertStar = db.prepare(
         "INSERT INTO stars (id, user_id, kind, palace, title, note, echo, god, reading, lit_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
       );
@@ -368,6 +428,59 @@ export function createCommunity(
         const text = textOrNull(memory.text, 80);
         if (!text) continue;
         insertMemory.run(textOrNull(memory.id, 80) || randomUUID(), userId, text, typeof memory.at === "number" ? memory.at : now);
+      }
+      const insertAsk = db.prepare(
+        "INSERT INTO asks (id, user_id, kind, question, answer, whose, subject_name, at) VALUES(?,?,?,?,?,?,?,?)",
+      );
+      for (const item of Array.isArray(body.asks) ? body.asks.slice(-40) : []) {
+        if (!item || typeof item !== "object") continue;
+        const ask = item as Record<string, unknown>;
+        const kind = ask.kind === "feeling" || ask.kind === "bond" ? ask.kind : ask.kind === "thing" ? "thing" : "";
+        const question = textOrNull(ask.question, 500);
+        const answer = textOrNull(ask.answer, 8000);
+        if (!kind || !question || !answer) continue;
+        insertAsk.run(
+          textOrNull(ask.id, 80) || randomUUID(),
+          userId,
+          kind,
+          question,
+          answer,
+          ask.whose === "named" ? "named" : "self",
+          textOrNull(ask.subjectName, 40) || "",
+          typeof ask.at === "number" ? ask.at : now,
+        );
+      }
+      const insertPerson = db.prepare(
+        "INSERT INTO people (id, user_id, name, gender, birth_year, birth_month, birth_day, birth_hour, birth_minute, hour_unknown, place_name, longitude, latitude, timezone, mbti) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      );
+      for (const item of Array.isArray(body.people) ? body.people.slice(0, 40) : []) {
+        if (!item || typeof item !== "object") continue;
+        const person = item as Record<string, unknown>;
+        const time = person.time && typeof person.time === "object" ? person.time as Record<string, unknown> : null;
+        const place = person.place && typeof person.place === "object" ? person.place as Record<string, unknown> : null;
+        if (!time || !place) continue;
+        const name = textOrNull(person.name, 40);
+        const year = typeof time.year === "number" ? time.year : null;
+        const month = typeof time.month === "number" ? time.month : null;
+        const day = typeof time.day === "number" ? time.day : null;
+        if (!name || person.gender !== "male" && person.gender !== "female" || year == null || month == null || day == null) continue;
+        insertPerson.run(
+          textOrNull(person.id, 80) || randomUUID(),
+          userId,
+          name,
+          person.gender,
+          year,
+          month,
+          day,
+          typeof time.hour === "number" ? time.hour : 0,
+          typeof time.minute === "number" ? time.minute : 0,
+          person.hourUnknown === true || time.hour == null ? 1 : 0,
+          textOrNull(place.name, 40) || "",
+          typeof place.longitude === "number" ? place.longitude : 0,
+          typeof place.latitude === "number" ? place.latitude : 0,
+          typeof place.timezone === "number" ? place.timezone : 8,
+          textOrNull(person.mbti, 8),
+        );
       }
       if (mood) {
         db.prepare(

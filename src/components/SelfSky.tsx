@@ -15,6 +15,7 @@ import { oracleMessages, palaceMessages, plainReading, readingChart } from "../o
 import { scoreQuiz } from "../mbti";
 import { keepStar } from "../account";
 import { updateState, useAppState } from "../store";
+import { newId } from "../id";
 import { igniteFate, recedeOpening } from "../bgm";
 import { settleBond } from "../moli/emotion";
 import { closeReach } from "../moli/reach";
@@ -243,7 +244,8 @@ export function SelfSky({
     setBusy(true);
     setOracle("");
     try {
-      setOracle(plainReading(
+      const whose = subject.person.id === voiced.person.id ? "self" as const : "named" as const;
+      const answer = plainReading(
         await askOracle(
           oracleMessages({
             kind: ask,
@@ -251,11 +253,25 @@ export function SelfSky({
             chart: subject,
             mbti,
             stars: state.stars,
-            whose: subject.person.id === voiced.person.id ? "self" : "named",
+            whose,
           }),
         ),
-      ));
-      if (granted) updateState((prev) => ({ ...prev, conjunctionAsked: true }));
+      );
+      updateState((prev) => ({
+        ...prev,
+        conjunctionAsked: granted ? true : prev.conjunctionAsked,
+        asks: [...prev.asks, {
+          id: newId(),
+          kind: ask,
+          question: text,
+          answer,
+          at: Date.now(),
+          whose,
+          subjectName: subject.person.name,
+        }].slice(-40),
+      }));
+      setQuestion("");
+      setOracle("");
     } catch (error) {
       setOracle(error instanceof Error ? error.message : "模型没有答上来。");
     } finally {
