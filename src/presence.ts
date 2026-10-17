@@ -130,17 +130,9 @@ export function reachLine(input: {
   const hour = beijingHour(now);
   const today = starDay(now);
   const talkedToday = messages.some((message) => message.role === "user" && message.at && starDay(message.at) === today);
-  const everTalked = messages.some((message) => message.role === "user");
 
   if (hour >= 5 && hour < 11 && !talkedToday && mood.sting < 48) {
     return { text: pick(["早。睡得怎么样。", "今天先别急。"], today) };
-  }
-
-  const reachedTonight = messages.some(
-    (message) => message.reach && message.at && starDay(message.at) === today && beijingHour(message.at) >= 21,
-  );
-  if (hour >= 21 && hour < 24 && everTalked && !reachedTonight && mood.sting < 48) {
-    return { text: pick(["不早了。先去睡吧。", "今天先到这。"], today) };
   }
 
   const lastUser = [...messages].reverse().find((message) => message.role === "user" && message.at);

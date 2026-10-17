@@ -1,8 +1,6 @@
 // Adapted from ya-chang/Moli src/main/emotion/EmotionFSM.ts (MIT).
 // Disk files are replaced by the star-chart record.
 
-import { beijingHour } from "../presence";
-
 export type Bond = {
   happiness: number;
   sadness: number;
@@ -95,9 +93,7 @@ export function hearBond(bond: Bond, text: string, userEmotion: string, now: num
   return { ...next, currentMood: moodLabel(next) };
 }
 
-export function bondCue(bond: Bond, userEmotion: string, now: number): string {
-  const hour = beijingHour(now);
-  const part = hour < 5 ? "已经很晚了，话轻一点。" : hour < 11 ? "现在是早上。" : hour < 18 ? "现在是白天。" : hour < 23 ? "现在是晚上。" : "快半夜了，让对方去睡。";
+export function bondCue(bond: Bond, userEmotion: string): string {
   const theirs =
     userEmotion === "sad"
       ? "对方这句是难过的。接住这件事，别追问，别讲道理。"
@@ -106,7 +102,7 @@ export function bondCue(bond: Bond, userEmotion: string, now: number): string {
         : userEmotion === "happy" || userEmotion === "excited"
           ? "对方这句是高兴的。跟着高兴，别泼冷水。"
           : "按这句本身接，不要另起一套安慰。";
-  return `${part}\n你现在的感受：心情${bond.currentMood}，开心 ${Math.round(bond.happiness)}，难过 ${Math.round(bond.sadness)}，生气 ${Math.round(bond.anger)}，牵挂 ${Math.round(bond.missLevel)}，亲近 ${Math.round(bond.intimacy)}，信任 ${Math.round(bond.trust)}。\n${theirs}`;
+  return `你现在的感受：心情${bond.currentMood}，开心 ${Math.round(bond.happiness)}，难过 ${Math.round(bond.sadness)}，生气 ${Math.round(bond.anger)}，牵挂 ${Math.round(bond.missLevel)}，亲近 ${Math.round(bond.intimacy)}，信任 ${Math.round(bond.trust)}。\n${theirs}`;
 }
 
 export function isBond(value: unknown): value is Bond {

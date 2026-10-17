@@ -72,17 +72,20 @@ assert.equal(
   null,
   "After eight it does not ask what they are doing",
 );
-const goodnight = reachLine({
-  now: night,
-  messages: [
-    { role: "user", text: "今天先这样", at: afternoon },
-    { role: "guide", text: "嗯。", at: afternoon + 1000 },
-  ],
-  memories: [],
-  mood,
-  reachedAt: afternoon,
-});
-assert.ok(goodnight && /睡|先到这/.test(goodnight.text));
+assert.equal(
+  reachLine({
+    now: night,
+    messages: [
+      { role: "user", text: "今天先这样", at: afternoon },
+      { role: "guide", text: "嗯。", at: afternoon + 1000 },
+    ],
+    memories: [],
+    mood,
+    reachedAt: afternoon,
+  }),
+  null,
+  "Night does not send anyone to sleep",
+);
 assert.equal(
   reachLine({
     now: night,

@@ -3,7 +3,7 @@ import http from "node:http";
 
 // server/community.ts
 import { DatabaseSync } from "node:sqlite";
-import { randomBytes, randomUUID, createHash } from "node:crypto";
+import { randomBytes, randomUUID, createHash, scryptSync, timingSafeEqual } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 var DAY = 864e5;
@@ -51,10 +51,13 @@ function createCommunity(file = process.env.COMMUNITY_DB || resolve(".data/commu
     ["restore_hash", "restore_hash TEXT"],
     ["created_at", "created_at INTEGER"],
     ["updated_at", "updated_at INTEGER NOT NULL DEFAULT 0"],
-    ["last_seen_at", "last_seen_at INTEGER"]
+    ["last_seen_at", "last_seen_at INTEGER"],
+    ["login_name", "login_name TEXT"],
+    ["password_hash", "password_hash TEXT"]
   ]) {
     if (!have.has(name)) db.exec(`ALTER TABLE users ADD COLUMN ${definition}`);
   }
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS users_login_name ON users(login_name) WHERE login_name IS NOT NULL");
   db.exec(`
     CREATE TABLE IF NOT EXISTS stars(
       id TEXT PRIMARY KEY,
@@ -129,7 +132,6 @@ function createCommunity(file = process.env.COMMUNITY_DB || resolve(".data/commu
     if (!user) throw new ApiError(401, "\u5148\u7559\u4E0B\u4E00\u4E2A\u79F0\u547C\uFF0C\u518D\u628A\u56DE\u58F0\u9001\u51FA\u53BB\u3002");
     return user;
   }
-  const publicUser = (u) => ({ id: u.id, name: u.name });
   function cookie(res, token, age = 30 * 86400) {
     res.setHeader(
       "set-cookie",
@@ -162,7 +164,7 @@ function createCommunity(file = process.env.COMMUNITY_DB || resolve(".data/commu
     return db.prepare("SELECT * FROM users WHERE id=?").get(id);
   }
   function sessionUser(row) {
-    return { id: row.id, name: row.name, birth: row.birth_year != null, updatedAt: row.updated_at || 0 };
+    return { id: row.id, name: row.name, birth: row.birth_year != null, login: Boolean(row.login_name), updatedAt: row.updated_at || 0 };
   }
   function recordEvent(userId, kind, at) {
     if (kind !== "open" && kind !== "edit" && kind !== "import") return;
@@ -407,6 +409,50 @@ function createCommunity(file = process.env.COMMUNITY_DB || resolve(".data/commu
         cookie(res, token, 365 * 86400);
         send({ user: u });
         return;
+      }
+      if (path === "/login" && method === "POST") {
+        limited(`login:${clientAddress(req)}`, 10, 15 * 6e4);
+        const body = await readJson(req);
+        const loginName = clean(body.name, 24);
+        const secret = typeof body.secret === "string" ? body.secret : "";
+        if (secret.length < 4 || secret.length > 64) throw new ApiError(400, "\u90A3\u53E5\u8BDD\u518D\u957F\u4E00\u70B9\u3002");
+        const now = Date.now();
+        if (body.intent === "open") {
+          const taken = db.prepare("SELECT id FROM users WHERE login_name=?").get(loginName);
+          if (taken) throw new ApiError(409, "\u8FD9\u4E2A\u540D\u5B57\u5DF2\u7ECF\u7559\u4E0B\u8FC7\u4E86\u3002");
+          const id = randomUUID();
+          db.prepare(
+            "INSERT INTO users (id, name, login_name, password_hash, created_at, updated_at, last_seen_at) VALUES(?,?,?,?,?,?,?)"
+          ).run(id, loginName, loginName, hashPassword(secret), now, now, now);
+          const token = randomBytes(32).toString("base64url");
+          db.prepare("INSERT INTO sessions VALUES(?,?,?)").run(sha(token), id, now + 365 * DAY);
+          cookie(res, token, 365 * 86400);
+          const saved = accountRow(id);
+          send({ user: saved ? sessionUser(saved) : null });
+          return;
+        }
+        if (body.intent === "keep") {
+          const existing = current(req);
+          const row = existing ? accountRow(existing.id) : void 0;
+          if (!row?.birth_year) throw new ApiError(401, "\u5148\u70B9\u4EAE\u4E09\u9897\u661F\u3002");
+          const taken = db.prepare("SELECT id FROM users WHERE login_name=? AND id!=?").get(loginName, row.id);
+          if (taken) throw new ApiError(409, "\u8FD9\u4E2A\u540D\u5B57\u5DF2\u7ECF\u7559\u4E0B\u8FC7\u4E86\u3002");
+          db.prepare("UPDATE users SET login_name=?, password_hash=?, last_seen_at=? WHERE id=?").run(loginName, hashPassword(secret), now, row.id);
+          const saved = accountRow(row.id);
+          send({ user: saved ? sessionUser(saved) : null });
+          return;
+        }
+        if (body.intent === "return") {
+          const row = db.prepare("SELECT * FROM users WHERE login_name=?").get(loginName);
+          if (!row?.password_hash || !checkPassword(secret, row.password_hash)) throw new ApiError(404, "\u5BF9\u4E0D\u4E0A\u8FD9\u9897\u661F\u3002");
+          const token = randomBytes(32).toString("base64url");
+          db.prepare("INSERT INTO sessions VALUES(?,?,?)").run(sha(token), row.id, now + 365 * DAY);
+          db.prepare("UPDATE users SET last_seen_at=? WHERE id=?").run(now, row.id);
+          cookie(res, token, 365 * 86400);
+          send({ user: sessionUser(row) });
+          return;
+        }
+        throw new ApiError(400, "\u6CA1\u542C\u61C2\u3002");
       }
       if (path === "/logout" && method === "POST") {
         const token = /(?:^|;\s*)cosmos_session=([^;]+)/.exec(
@@ -728,6 +774,19 @@ function bondText(value) {
   if (!BOND_KEYS.every((key) => typeof bond[key] === "number")) return null;
   if (typeof bond.currentMood !== "string" || bond.currentMood.length > 12) return null;
   return JSON.stringify(bond);
+}
+function hashPassword(secret) {
+  const salt = randomBytes(16).toString("base64url");
+  const hash = scryptSync(secret, salt, 32).toString("base64url");
+  return `scrypt$${salt}$${hash}`;
+}
+function checkPassword(secret, stored) {
+  const [kind, salt, hash] = stored.split("$");
+  if (kind !== "scrypt" || !salt || !hash) return false;
+  const next = scryptSync(secret, salt, 32);
+  const prev = Buffer.from(hash, "base64url");
+  if (next.length !== prev.length) return false;
+  return timingSafeEqual(next, prev);
 }
 function clean(value, max) {
   const text = typeof value === "string" ? value.trim() : "";

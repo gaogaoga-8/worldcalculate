@@ -1,0 +1,259 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  font-family: "Songti SC", "Noto Serif SC", "Source Han Serif SC", "STSong", serif;
+  color: #eef1ff;
+}
+
+#sky, #galaxy {
+  position: fixed; inset: 0;
+  width: 100%; height: 100%;
+  display: block;
+  touch-action: none;
+}
+#galaxy { pointer-events: none; }
+
+/* 仅在 ?debug 下出现，用来模拟聊天 */
+.debug-chat {
+  position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 3;
+  width: 36px; height: 36px; border-radius: 50%;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 255, 255, .25);
+  color: #fff; font: 20px/1 sans-serif;
+  cursor: pointer;
+}
+.debug-chat[data-n]::after {
+  content: attr(data-n);
+  position: absolute; right: 42px; top: 50%; transform: translateY(-50%);
+  font-size: 11px; opacity: .6;
+}
+
+body.covered .seed { opacity: 0; visibility: hidden; pointer-events: none; }
+
+/* ---------- 三颗可输入的星 ---------- */
+.seed {
+  --s: 1;
+  --g: 1;
+  --halo: .5;
+  position: fixed; left: 0; top: 0;
+  width: 0; height: 0;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+  will-change: transform;
+}
+body.ready .seed { opacity: 1; }
+.seed.open { z-index: 2; }
+.seed.open { --halo: .8; }
+.seed.done { --halo: .9; }
+
+.star {
+  position: absolute; left: -22px; top: -22px;
+  width: 44px; height: 44px;
+  appearance: none; background: none; border: 0; padding: 0;
+  color: inherit; font: inherit;
+  cursor: pointer;
+  outline: none;
+}
+body.locked .star { cursor: default; pointer-events: none; }
+body.named .star { pointer-events: auto; cursor: pointer; }
+body.named .seed[data-key="sign"] .core { width: 4px; height: 4px; margin: -2px; }
+
+.member {
+  position: fixed; left: 0; top: 0;
+  width: 44px; height: 44px; margin: -22px 0 0 -22px;
+  appearance: none; background: none; border: 0; padding: 0;
+  z-index: 2;
+  opacity: 0; pointer-events: none;
+  color: inherit; font: inherit;
+}
+body.named .member { opacity: 1; pointer-events: auto; cursor: pointer; }
+.member .name {
+  position: absolute; left: calc(50% + 8px); top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-size: 8px; letter-spacing: .12em;
+  color: rgba(220, 226, 245, .72);
+  text-shadow: 0 0 4px rgba(0, 0, 0, .85);
+  pointer-events: none;
+}
+.member.flip .name { left: auto; right: calc(50% + 8px); }
+.member.daily .core {
+  background: #f6efe2;
+  box-shadow: 0 0 2.5px .8px rgba(255, 244, 220, .9), 0 0 8px 2px rgba(255, 214, 170, .38);
+}
+
+.core {
+  position: absolute; left: 50%; top: 50%;
+  width: 2.6px; height: 2.6px; margin: -1.3px;
+  border-radius: 50%;
+  background: #f4f6ff;
+  transform: scale(var(--s));
+  box-shadow: 0 0 2px .5px rgba(235, 240, 255, .7), 0 0 5px 1px rgba(200, 212, 255, .25);
+  animation: twinkle var(--twd, 4s) ease-in-out var(--twdl, 0s) infinite;
+  transition: box-shadow .8s ease;
+}
+.seed.done .core {
+  background: rgb(var(--tint, 255, 255, 255));
+  box-shadow: 0 0 2.5px .8px rgba(255, 255, 255, .85), 0 0 7px 2px rgba(var(--tint, 210, 220, 255), .4);
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .62; }
+}
+
+.halo {
+  position: absolute; left: 50%; top: 50%;
+  width: 18px; height: 18px; margin: -9px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(225, 232, 255, .35) 0%, rgba(190, 205, 255, .08) 40%, rgba(170, 190, 255, 0) 70%);
+  opacity: calc(var(--halo) * var(--g));
+  transform: scale(var(--s));
+  transition: opacity .8s ease;
+}
+
+.name {
+  position: absolute; left: calc(50% + 5px); top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-size: 8px; letter-spacing: .12em;
+  color: rgba(220, 226, 245, .45);
+  text-shadow: 0 0 4px rgba(0, 0, 0, .8);
+  pointer-events: none;
+  transition: color .8s ease;
+}
+.seed.open .name { color: rgba(235, 240, 255, .75); }
+.seed.done .name { color: rgba(235, 240, 255, .62); }
+
+/* ---------- 就地展开的输入 ---------- */
+.panel {
+  position: absolute; left: -12px; top: 18px;
+  display: flex; align-items: flex-end; gap: 14px;
+  padding: 16px 16px 14px 18px;
+  background: rgba(8, 10, 16, .78);
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 18px;
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .38);
+  transform-origin: 12px 0;
+  opacity: 0; visibility: hidden;
+  transform: translate(var(--shift, 0px), -4px) scale(.94);
+  transition: opacity .28s ease, transform .28s ease, visibility 0s linear .28s;
+}
+.seed.flip-x .panel { left: auto; right: -12px; transform-origin: calc(100% - 12px) 0; }
+.seed.open .panel {
+  opacity: 1; visibility: visible; transform: translateX(var(--shift, 0px));
+  transition: opacity .28s ease, transform .28s ease, visibility 0s;
+}
+
+.fields { display: flex; flex-direction: column; gap: 12px; min-width: 11em; }
+.cell { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.cell > span {
+  font: 11px/1 "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  letter-spacing: .14em;
+  color: rgba(168, 178, 198, .7);
+}
+
+.panel input,
+.panel select,
+.genders button {
+  font: 14px/1.4 "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  color: #c9d0df;
+  letter-spacing: .03em;
+}
+
+.panel input {
+  display: block;
+  width: 9.5em; min-height: 32px;
+  padding: 6px 0 7px;
+  appearance: none; -webkit-appearance: none;
+  background: transparent;
+  border: 0; border-bottom: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 0;
+  outline: none;
+  color-scheme: dark;
+  transition: border-color .3s ease;
+}
+.panel input:focus { border-bottom-color: #a4b5d8; }
+.panel input::placeholder { color: rgba(201, 208, 223, .35); }
+.panel input::-webkit-date-and-time-value { text-align: left; }
+.panel input::-webkit-calendar-picker-indicator { opacity: .5; filter: invert(1); }
+.genders { display: flex; gap: 18px; }
+.genders button {
+  appearance: none; background: none; border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, .16);
+  color: rgba(201, 208, 223, .4);
+  min-width: 2em; min-height: 32px; padding: 6px 0 7px; cursor: pointer;
+}
+.genders button.on { color: #e4e9f4; border-bottom-color: #a4b5d8; }
+.cell.secret { display: none; }
+body.ask-secret .cell.secret { display: flex; }
+.panel .fault {
+  margin: 0;
+  max-width: 12em;
+  font: 11px/1.5 "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  color: #d7b2b6;
+}
+.panel select {
+  display: block;
+  width: 100%; min-height: 32px;
+  padding: 6px 14px 7px 0;
+  appearance: none; -webkit-appearance: none;
+  background-color: transparent;
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(201, 208, 223, .55) 50%),
+    linear-gradient(135deg, rgba(201, 208, 223, .55) 50%, transparent 50%);
+  background-position: calc(100% - 6px) calc(50% + 1px), calc(100% - 2px) calc(50% + 1px);
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  border: 0; border-bottom: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 0;
+  outline: none;
+  color-scheme: dark;
+  cursor: pointer;
+}
+.panel select:focus { border-bottom-color: #a4b5d8; }
+.panel select:disabled { opacity: .35; cursor: default; }
+.panel select:has(option[value=""]:checked) { color: rgba(201, 208, 223, .35); }
+.panel option { background: #10131b; color: #e6e8ef; }
+.row { display: flex; gap: 14px; align-items: flex-end; }
+.row select { min-width: 0; }
+.birth-fields { min-width: 16.5em; }
+.colon {
+  align-self: flex-end;
+  padding: 0 0 8px;
+  color: rgba(168, 178, 198, .55);
+  font: 14px/1 "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-style: normal;
+}
+
+.ok {
+  flex: none;
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  appearance: none;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(230, 236, 255, .35);
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  transition: opacity .3s ease, background .3s ease;
+}
+.ok svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ok { margin-top: 1px; }
+.ok:disabled { opacity: 0; pointer-events: none; }
+.ok:not(:disabled):active { background: rgba(255, 255, 255, .16); }
+
+@media (prefers-reduced-motion: reduce) {
+  .seed, .core, .halo, .name, .panel, .seed.open .panel { transition: none; }
+  .core { animation: none; }
+}

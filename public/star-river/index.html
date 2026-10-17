@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-visual" />
+<meta name="theme-color" content="#000000" />
+<title>星河</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body class="ask-secret">
+<canvas id="sky" aria-hidden="true"></canvas>
+<canvas id="galaxy" aria-hidden="true"></canvas>
+
+<div class="seed" data-key="origin">
+  <button class="star" type="button" aria-label="来处" aria-expanded="false">
+    <i class="halo"></i><i class="core"></i><span class="name">来处</span>
+  </button>
+  <form class="panel" inert autocomplete="off">
+    <div class="fields">
+      <label class="cell">
+        <span>省</span>
+        <select name="province" aria-label="省"></select>
+      </label>
+      <label class="cell">
+        <span>市</span>
+        <select name="city" aria-label="市" disabled></select>
+      </label>
+    </div>
+    <button class="ok" type="submit" aria-label="完成" disabled><svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" /></svg></button>
+  </form>
+</div>
+
+<div class="seed" data-key="birth">
+  <button class="star" type="button" aria-label="降生" aria-expanded="false">
+    <i class="halo"></i><i class="core"></i><span class="name">降生</span>
+  </button>
+  <form class="panel" inert autocomplete="off">
+    <div class="fields birth-fields">
+      <div class="row">
+        <label class="cell"><span>年</span><select name="year" aria-label="年"></select></label>
+        <label class="cell"><span>月</span><select name="month" aria-label="月"></select></label>
+        <label class="cell"><span>日</span><select name="day" aria-label="日"></select></label>
+      </div>
+      <div class="row">
+        <label class="cell"><span>时</span><select name="hour" aria-label="时"></select></label>
+        <i class="colon" aria-hidden="true">:</i>
+        <label class="cell"><span>分</span><select name="minute" aria-label="分"></select></label>
+      </div>
+    </div>
+    <button class="ok" type="submit" aria-label="完成" disabled><svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" /></svg></button>
+  </form>
+</div>
+
+<div class="seed" data-key="sign">
+  <button class="star" type="button" aria-label="符号" aria-expanded="false">
+    <i class="halo"></i><i class="core"></i><span class="name">符号</span>
+  </button>
+  <form class="panel" inert autocomplete="off">
+    <div class="fields">
+      <input name="name" type="text" placeholder="名字" maxlength="24" enterkeyhint="done" aria-label="名字" />
+      <div class="genders" role="group" aria-label="性别">
+        <button type="button" data-gender="male">男</button>
+        <button type="button" data-gender="female">女</button>
+      </div>
+      <label class="cell secret">
+        <span>暗语</span>
+        <input name="secret" type="password" placeholder="只有你知道的" maxlength="64" autocomplete="new-password" aria-label="暗语" />
+      </label>
+      <p class="fault" hidden></p>
+    </div>
+    <button class="ok" type="submit" aria-label="完成" disabled><svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" /></svg></button>
+  </form>
+</div>
+
+<script src="assets/sky.js"></script>
+<script src="galaxy.js"></script>
+<script src="timeline.js"></script>
+<script src="main.js?v=sky4"></script>
+</body>
+</html>

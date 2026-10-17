@@ -9,6 +9,8 @@ import {
   liurenMessages,
   offeredQuestion,
   oracleMessages,
+  plainReading,
+  readingChart,
   shouldCast,
 } from "../oracle/prompt";
 import { ROUND_TURNS, starProgress, dailyRoundTurns } from "../galaxy";
@@ -30,12 +32,14 @@ export function ChatView({
   starName = "本命",
   minimal = false,
   presence = false,
+  onUserSend,
 }: {
   chart: Chart;
   embedded?: boolean;
   starName?: string;
   minimal?: boolean;
   presence?: boolean;
+  onUserSend?: (text: string) => void;
 }) {
   const state = useAppState();
   const [text, setText] = useState("");
@@ -114,6 +118,7 @@ export function ChatView({
   async function send(value: string) {
     const content = value.trim();
     if (!content || busy) return;
+    onUserSend?.(content);
     setBusy(true);
     setFault("");
     try {
@@ -124,8 +129,9 @@ export function ChatView({
       const userEmotion = detectEmotion(content);
       const bond = hearBond(settleBond(state.bond, now), content, userEmotion, now);
       const remembered = memoryCue(recall(kept, content));
+      const others = state.people.map((person) => wrap(person, state.settings.ziHour).chart);
       const answer = shouldCast(content, history)
-        ? await castReading(history, content)
+        ? await castReading(history, content, chart, others)
         : await askOracle(
             oracleMessages({
               kind: "chat",
@@ -143,7 +149,6 @@ export function ChatView({
                       userEmotion,
                       memories: remembered,
                       name: chart.person.name,
-                      now,
                     }),
                   }
                 : {
@@ -307,6 +312,8 @@ export function ChatView({
 async function castReading(
   history: { role: "user" | "guide"; text: string }[],
   latest: string,
+  self: Chart,
+  others: Chart[],
 ): Promise<string> {
   let summary = offeredQuestion(history, latest);
   try {
@@ -314,7 +321,8 @@ async function castReading(
   } catch {
     // 总结没出来时，用刚才那句邀请或用户自己的话。
   }
-  return askOracle(liurenMessages(summary, new Date()));
+  const subject = readingChart(`${summary}\n${offeredQuestion(history, latest)}\n${latest}`, self, others);
+  return plainReading(await askOracle(liurenMessages(summary, new Date(), subject)));
 }
 
 function whenLabel(at: number) {

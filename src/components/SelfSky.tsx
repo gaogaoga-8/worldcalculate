@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import type { Chart } from "../bazi/chart";
+import { buildChart, type Chart } from "../bazi/chart";
 import {
   formed,
   PALACES,
@@ -11,8 +11,9 @@ import {
   type LitStar,
 } from "../galaxy";
 import { askOracle } from "../oracle/client";
-import { oracleMessages, palaceMessages } from "../oracle/prompt";
+import { oracleMessages, palaceMessages, plainReading, readingChart } from "../oracle/prompt";
 import { scoreQuiz } from "../mbti";
+import { keepStar } from "../account";
 import { updateState, useAppState } from "../store";
 import { igniteFate, recedeOpening } from "../bgm";
 import { settleBond } from "../moli/emotion";
@@ -25,6 +26,7 @@ import { PersonaView } from "./PersonaView";
 import { WaitStar } from "./WaitStar";
 import { Nebula } from "./Nebula";
 import { Galaxy } from "./Galaxy";
+import { markStarBeside, starBesideDone, StarClaim } from "./StarClaim";
 
 export function SelfSky({
   chart,
@@ -64,6 +66,13 @@ export function SelfSky({
   const surfaceRef = useRef<HTMLElement>(null);
   const coreRef = useRef<HTMLButtonElement>(null);
   const [skipToken, setSkipToken] = useState(0);
+  const [beside, setBeside] = useState(() => !starBesideDone());
+  const [claim, setClaim] = useState(false);
+  useEffect(() => {
+    const sync = () => setBeside(!starBesideDone());
+    window.addEventListener("star-beside", sync);
+    return () => window.removeEventListener("star-beside", sync);
+  }, []);
   const ignition = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
     () => () => {
@@ -194,9 +203,10 @@ export function SelfSky({
     askOracle(palaceMessages(voiced, palace))
       .then((text) => {
         if (cancel) return;
+        const clean = plainReading(text);
         updateState((prev) => ({
           ...prev,
-          stars: prev.stars.map((star) => (star.id === id ? { ...star, reading: text } : star)),
+          stars: prev.stars.map((star) => (star.id === id ? { ...star, reading: clean } : star)),
         }));
       })
       .catch((error) => {
@@ -228,22 +238,23 @@ export function SelfSky({
       );
       return;
     }
-    const named = state.links.find((link) => text.includes(link.name)) ?? null;
+    const others = state.people.map((person) => buildChart(person, { ziHour: state.settings.ziHour }));
+    const subject = readingChart(text, voiced, others);
     setBusy(true);
     setOracle("");
     try {
-      setOracle(
+      setOracle(plainReading(
         await askOracle(
           oracleMessages({
             kind: ask,
             question: text,
-            chart: voiced,
+            chart: subject,
             mbti,
             stars: state.stars,
-            other: named,
+            whose: subject.person.id === voiced.person.id ? "self" : "named",
           }),
         ),
-      );
+      ));
       if (granted) updateState((prev) => ({ ...prev, conjunctionAsked: true }));
     } catch (error) {
       setOracle(error instanceof Error ? error.message : "模型没有答上来。");
@@ -377,6 +388,28 @@ export function SelfSky({
           <span>世界</span>
         </button>
         <p className="star-invitation">点击星星</p>
+        {beside && !forming && !claim && (
+          <p className="star-beside">
+            这颗星还只在你身边
+            <button
+              type="button"
+              className="text-action"
+              onClick={() => setClaim(true)}
+            >
+              留下这颗星
+            </button>
+          </p>
+        )}
+        {claim && (
+          <StarClaim
+            intent="keep"
+            onClose={() => {
+              markStarBeside();
+              setClaim(false);
+            }}
+            onSubmit={(name, secret) => keepStar(name, secret)}
+          />
+        )}
         {conjuring && (
           <div className="conjunction" aria-hidden="true">
             <i className="conj-wave" />

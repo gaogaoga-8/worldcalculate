@@ -697,7 +697,31 @@ select option { background: #10131b; color: #e6e8ef; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 .nebula { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .eyebrow { font-family: var(--mono); font-size: 9px; letter-spacing: .16em; color: #747f94; }
-.stage { padding: 0; min-height: 0; }
+.workspace > .stage:has(.river-frame) { padding: 0; display: flex; flex-direction: column; min-height: 0; }
+.river-home { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.river-frame { flex: 1; min-height: 0; width: 100%; height: 100%; border: 0; background: #000; }
+.river-echo {
+  position: absolute;
+  left: 22px;
+  bottom: 26px;
+  z-index: 3;
+  padding: 8px 2px;
+  background: none;
+  border: 0;
+  color: rgba(214, 222, 238, .72);
+  font-size: 12px;
+  letter-spacing: .2em;
+  text-shadow: 0 0 8px rgba(0, 0, 0, .9);
+}
+.river-desk { position: absolute; inset: 0; z-index: 2; pointer-events: none; min-height: 0; }
+.river-desk .orb, .river-desk .world-object { pointer-events: auto; }
+.palace-sheet { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
+.palace-sheet h1 { font-size: 15px; font-weight: 400; letter-spacing: .08em; margin: 0 0 16px; }
+.palace-list { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.palace-list button { background: none; border: 0; border-bottom: 1px solid transparent; color: #626e85; font-size: 12px; padding: 8px 0; }
+.palace-list button.on { color: #c7d3e9; border-bottom-color: #b1c3e573; }
+.palace-sheet p { color: #b6c0d4; font-size: 13px; line-height: 1.8; }
+.star-surface .chart-embed { flex: 1; min-height: 0; overflow: auto; }
 .stage > .panel { padding: 0 28px 20px; }
 .minimal-intake { display: grid; place-items: center; padding: 36px 24px 72px; }
 .minimal-entry { width: min(400px, 100%); padding: 0; }
@@ -739,7 +763,12 @@ select option { background: #10131b; color: #e6e8ef; }
 .intake-star.calling i { animation: star-breathe 4s ease-in-out infinite; }
 .intake-star:hover, .intake-star.active { background: radial-gradient(circle, #c6d6fa09, transparent 65%); }
 .joining .intake-star span { opacity: 0; }
-.intake-hint { position: absolute; bottom: 12%; left: 0; width: 100%; text-align: center; color: #758197; font-size: 12px; letter-spacing: .12em; }
+.intake-hint { position: absolute; bottom: 12%; left: 0; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 0; text-align: center; color: #758197; font-size: 12px; letter-spacing: .12em; }
+.intake-hint p { margin: 0; }
+.intake-hint .text-action { color: #667386; letter-spacing: .12em; }
+.claim-sheet { position: fixed; z-index: 30; }
+.claim-secret { margin-top: 22px; }
+.claim-switch { display: block; margin-top: 18px; padding-left: 0; letter-spacing: .12em; color: #667386; }
 .text-action { background: none; border: 0; color: #8794ac; font: inherit; font-size: 12px; padding: 12px 4px; min-height: 44px; }
 .text-action:hover { color: #e3eafa; }
 .constellation-back { position: absolute; bottom: 9%; left: 6%; font-size: 22px; width: 44px; }
@@ -747,7 +776,30 @@ select option { background: #10131b; color: #e6e8ef; }
 .intake-sheet header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 28px; }
 .intake-sheet h1 { font-size: 18px; letter-spacing: .06em; margin: 0; }
 .intake-sheet h1 small { font-size: 10px; color: #68748a; font-weight: 400; margin-left: 12px; letter-spacing: .1em; }
-.intake-sheet .name-field { width: 100%; background: none; border: 0; border-bottom: 1px solid #ffffff20; border-radius: 0; font-size: 17px; padding: 12px 0; }
+.intake-sheet .name-field,
+.claim-sheet .name-field {
+  width: 100%;
+  box-sizing: border-box;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #ffffff20;
+  border-radius: 0;
+  box-shadow: none;
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: .02em;
+  color: #c9d0df;
+  padding: 13px 0 15px;
+  outline: none;
+}
+.intake-sheet .name-field::placeholder,
+.claim-sheet .name-field::placeholder { color: #6f7789; }
+.intake-sheet .name-field:hover,
+.claim-sheet .name-field:hover { border-bottom-color: #ffffff45; }
+.intake-sheet .name-field:focus,
+.claim-sheet .name-field:focus { border-bottom-color: #a4b5d8; outline: none; }
 .intake-sheet .minimal-gender { margin-top: 28px; }
 .intake-save { display: flex; justify-content: flex-end; margin-top: 24px; }
 @keyframes sheet-arrive { from { opacity: 0; margin-top: 8px; } to { opacity: 1; margin-top: 0; } }
@@ -755,6 +807,7 @@ select option { background: #10131b; color: #e6e8ef; }
 .formation-caption { position: absolute; bottom: 17%; left: 0; right: 0; text-align: center; color: #a3aec5; font-size: 12px; letter-spacing: .2em; animation: formation-caption 5.6s ease both; pointer-events: none; }
 .formation-skip { position: absolute; bottom: 28px; right: 32px; padding: 10px; background: none; border: 0; color: #626b7c; font-size: 10px; }
 .star-world, .star-scene { position: relative; height: 100%; width: 100%; min-height: 380px; }
+.river-desk.star-scene { position: absolute; inset: 0; height: auto; min-height: 0; pointer-events: none; z-index: 2; }
 .star-world { overflow: hidden; }
 .star-scene > .nebula { opacity: .86; }
 .star-scene .orb { width: 76px; height: 76px; padding: 10px; border-radius: 50%; justify-content: center; gap: 12px; z-index: 1; }
@@ -770,6 +823,8 @@ select option { background: #10131b; color: #e6e8ef; }
 .star-scene .orb.dormant b { color: #626e82; }
 .star-scene .orb:hover::after { content: ""; position: absolute; inset: 12px; border: 1px solid #ffffff0b; border-radius: 50%; }
 .star-invitation { position: absolute; left: 0; right: 0; bottom: 7%; text-align: center; pointer-events: none; font-size: 10px; letter-spacing: .14em; color: #64718a; margin: 0; }
+.star-beside { position: absolute; left: 0; right: 0; bottom: calc(7% + 22px); margin: 0; display: flex; justify-content: center; align-items: center; gap: 8px; color: #667386; font-size: 11px; letter-spacing: .12em; }
+.star-beside .text-action { color: #758197; letter-spacing: .12em; min-height: 0; padding: 4px; font-size: 11px; }
 .world-object { position: absolute; bottom: 7%; left: 7%; width: 48px; height: 48px; padding: 0; background: none; border: 0; display: grid; place-items: center; }
 .world-object i { width: 13px; height: 13px; border: 1px solid #8897b56b; border-radius: 50%; background: radial-gradient(circle at 32% 30%, #a7bcd026, transparent 65%); box-shadow: inset -4px -1px 5px #0007; }
 .world-object span { position: absolute; top: 44px; color: #778299; font-size: 9px; opacity: 0; transition: opacity .2s; }
@@ -850,6 +905,7 @@ select option { background: #10131b; color: #e6e8ef; }
   .star-scene .orb b { font-size: 9px; }
   .star-surface .bubble { font-size: 13px; }
   .star-invitation { bottom: 9%; }
+  .star-beside { bottom: calc(9% + 22px); }
   .world-object { bottom: 9%; left: 5%; }
   .star-whisper { bottom: 15%; font-size: 11px; }
   .formation-caption { bottom: 18%; font-size: 11px; }
@@ -945,8 +1001,8 @@ select option { background: #10131b; color: #e6e8ef; }
 }
 .star-scene .orb.cosmos-core::before { background: radial-gradient(circle, #c3d1ed0b, transparent 64%); }
 .star-scene .orb.cosmos-core b { opacity: var(--core-label, .85); }
-.star-scene .orb:not(.core), .star-scene .world-object, .star-scene .star-invitation { transition: opacity 1.25s ease; }
-.star-scene.is-forming .orb:not(.core), .star-scene.is-forming .world-object, .star-scene.is-forming .star-invitation { opacity: 0; pointer-events: none; }
+.star-scene .orb:not(.core), .star-scene .world-object, .star-scene .star-invitation, .star-scene .star-beside { transition: opacity 1.25s ease; }
+.star-scene.is-forming .orb:not(.core), .star-scene.is-forming .world-object, .star-scene.is-forming .star-invitation, .star-scene.is-forming .star-beside { opacity: 0; pointer-events: none; }
 .formation-controls { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
 .formation-controls .formation-skip { pointer-events: auto; color: #758099; letter-spacing: .06em; font-size: 10px; }
 .star-scene.is-forming .orb.cosmos-core:hover::after { display: none; }

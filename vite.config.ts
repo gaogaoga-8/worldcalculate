@@ -9,6 +9,10 @@ export default defineConfig(({ mode }) => {
   return {
     base: mode === "production" ? "./" : "/",
     plugins: [react(), oraclePlugin(), communityPlugin()],
-    server: { host: "127.0.0.1", port: 5173 },
+    server: {
+      host: "127.0.0.1",
+      port: 5173,
+      watch: { ignored: ["**/.data/**"] },
+    },
   };
 });

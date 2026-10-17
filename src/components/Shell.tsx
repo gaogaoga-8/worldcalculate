@@ -17,9 +17,10 @@ import {
   useAppState,
   type AppState,
 } from "../store";
-import { restoreAccount, restoreKey, saveAccount } from "../account";
+import { keepStar, restoreAccount, restoreKey, saveAccount } from "../account";
 import { musicOn, subscribeMusic, toggleMusic } from "../bgm";
 import { readModel, writeModel, type ModelLink } from "../oracle/settings";
+import { markStarBeside, StarClaim } from "./StarClaim";
 
 export type ViewId = "self" | "connect" | "cards";
 
@@ -30,6 +31,11 @@ type Props = {
   onReplay?: () => void;
   onEdit?: () => void;
   onCards?: () => void;
+  onTalk?: () => void;
+  onChart?: () => void;
+  onPalace?: () => void;
+  onPersona?: () => void;
+  onAsk?: () => void;
   children: ReactNode;
 };
 
@@ -39,6 +45,11 @@ export function Shell({
   onReplay,
   onEdit,
   onCards,
+  onTalk,
+  onChart,
+  onPalace,
+  onPersona,
+  onAsk,
   children,
 }: Props) {
   const state = useAppState();
@@ -48,6 +59,7 @@ export function Shell({
   const fileRef = useRef<HTMLInputElement>(null);
   const [model, setModel] = useState<ModelLink>(() => readModel());
   const [music, setMusic] = useState(musicOn);
+  const [claim, setClaim] = useState(false);
   const onPhone = Capacitor.isNativePlatform();
   useEffect(() => subscribeMusic(setMusic), []);
 
@@ -104,6 +116,21 @@ export function Shell({
                 {mode === "desk" && (
                   <>
                     <p>星图</p>
+                    {onTalk && (
+                      <button onClick={() => { setMenu(false); onTalk(); }}>对话</button>
+                    )}
+                    {onChart && (
+                      <button onClick={() => { setMenu(false); onChart(); }}>命盘</button>
+                    )}
+                    {onPalace && (
+                      <button onClick={() => { setMenu(false); onPalace(); }}>宫位</button>
+                    )}
+                    {onPersona && (
+                      <button onClick={() => { setMenu(false); onPersona(); }}>人格</button>
+                    )}
+                    {onAsk && (
+                      <button onClick={() => { setMenu(false); onAsk(); }}>问事</button>
+                    )}
                     <button
                       onClick={() => {
                         setMenu(false);
@@ -121,6 +148,14 @@ export function Shell({
                       重新录入
                     </button>
                     <button onClick={exportJson}>导出</button>
+                    <button
+                      onClick={() => {
+                        setMenu(false);
+                        setClaim(true);
+                      }}
+                    >
+                      留下这颗星
+                    </button>
                     <button
                       onClick={() => {
                         setMenu(false);
@@ -235,6 +270,16 @@ export function Shell({
           )}
         </div>
       </header>
+      {claim && (
+        <StarClaim
+          intent="keep"
+          onClose={() => {
+            markStarBeside();
+            setClaim(false);
+          }}
+          onSubmit={(name, secret) => keepStar(name, secret)}
+        />
+      )}
       {mode === "desk" ? (
         <div className="workspace">
           <div className="stage">{children}</div>

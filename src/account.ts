@@ -9,7 +9,9 @@ const SAVED = "shijie-suanfa/saved-at";
 const DIRTY = "shijie-suanfa/dirty";
 const OPENED = "shijie-suanfa/opened";
 
-type SessionUser = { id: string; name: string; birth: boolean; updatedAt: number };
+type SessionUser = { id: string; name: string; birth: boolean; login?: boolean; updatedAt: number };
+
+export type Entry = "gate" | "intake" | "ready";
 
 type Sky = {
   updatedAt: number;
@@ -28,7 +30,7 @@ type Sky = {
 };
 
 let started = false;
-let flight: Promise<void> | null = null;
+let flight: Promise<Entry> | null = null;
 
 export function startAccountSync() {
   if (!started) {
@@ -60,6 +62,53 @@ export async function saveAccount(person: Person, kind?: "open" | "edit" | "impo
   return saved;
 }
 
+export async function openStar(loginName: string, secret: string) {
+  await community("/login", "POST", { intent: "open", name: loginName, secret });
+  quietly(() => {
+    const prev = getState();
+    replaceState(hydrate({
+      ...prev,
+      self: null,
+      galaxyId: "",
+      stars: [],
+      messages: [],
+      memories: [],
+      roundTurns: 0,
+      mirror: null,
+      conjunctionAt: null,
+      conjunctionAsked: false,
+    }));
+  });
+  localStorage.setItem(DIRTY, "0");
+  try { localStorage.removeItem("star-river:galaxy"); } catch { /* 新账号从三颗星重新开始。 */ }
+  rememberStar();
+}
+
+export async function keepStar(loginName: string, secret: string) {
+  const state = getState();
+  if (!state.self) throw new Error("先点亮三颗星。");
+  await saveAccount(state.self);
+  await community("/login", "POST", { intent: "keep", name: loginName, secret });
+  await pushSky();
+  rememberStar();
+}
+
+export async function returnStar(loginName: string, secret: string) {
+  await community("/login", "POST", { intent: "return", name: loginName, secret });
+  await pullSky();
+  try { localStorage.removeItem("star-river:galaxy"); } catch { /* 认回后按这颗星自己的出生重新铺星系。 */ }
+  rememberStar();
+}
+
+function rememberStar() {
+  try {
+    localStorage.setItem("shijie-suanfa/star-beside", "1");
+  } catch {
+    // 记不住这次，下次进来还会再轻轻说一次。
+  }
+  window.dispatchEvent(new Event("star-beside"));
+}
+
 export async function restoreAccount(restoreKey: string) {
   const saved = await community<{ user: SessionUser; updatedAt: number }>("/restore", "POST", { restoreKey });
   localStorage.setItem(RESTORE, restoreKey);
@@ -82,38 +131,31 @@ async function pushSky() {
   localStorage.setItem(DIRTY, "0");
 }
 
-async function reconcile() {
-  const local = getState();
+async function reconcile(): Promise<Entry> {
   let session: { user: SessionUser | null };
   try {
     session = await community<{ user: SessionUser | null }>("/session");
   } catch {
-    return;
+    return "gate";
   }
-  if (!session.user && local.self) {
-    await saveAccount(local.self, "open").catch(() => {});
-    await pushSky().catch(() => {});
-    return;
-  }
-  if (!session.user) return;
-  if (!session.user.birth && local.self) {
-    await saveAccount(local.self, "open").catch(() => {});
-    await pushSky().catch(() => {});
-    return;
-  }
-  if (session.user.birth && !local.self) {
+  const user = session.user;
+  if (!user?.login) return "gate";
+  if (!user.birth) return "intake";
+  const local = getState();
+  if (!local.self) {
     await pullSky();
     await noteOpen();
-    return;
+    return "ready";
   }
-  if (localStorage.getItem(DIRTY) === "1" && local.self) {
+  if (localStorage.getItem(DIRTY) === "1") {
     await pushSky().catch(() => {});
     await noteOpen();
-    return;
+    return "ready";
   }
   const savedAt = Number(localStorage.getItem(SAVED) || 0);
-  if (session.user.birth && session.user.updatedAt > savedAt) await pullSky();
+  if (user.updatedAt > savedAt) await pullSky();
   await noteOpen();
+  return "ready";
 }
 
 async function pullSky() {

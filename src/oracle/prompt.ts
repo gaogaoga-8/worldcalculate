@@ -1,7 +1,7 @@
 import type { Chart, PillarView } from "../bazi/chart";
 import { clockLabel } from "../bazi/chart";
 import { STEMS } from "../bazi/ganzhi";
-import { formed, type LitStar, type PalaceId, type StarLink } from "../galaxy";
+import type { LitStar, PalaceId, StarLink } from "../galaxy";
 
 export type OracleKind = "thing" | "feeling" | "bond" | "chat";
 
@@ -19,11 +19,12 @@ export function oracleMessages(input: {
   other?: StarLink | null;
   history?: { role: "user" | "guide"; text: string }[];
   presence?: { mood: string; memories: string; voice?: string };
+  whose?: "self" | "named";
 }): OracleTurn[] {
   return [
     {
       role: "system",
-      content: input.kind === "chat" ? input.presence?.voice || chatVoice(input.presence) : `${master(input.chart, input.mbti)}\n\n${tune(input)}`,
+      content: input.kind === "chat" ? input.presence?.voice || chatVoice(input.presence) : `${master(input.chart)}\n\n${tune(input.kind, input.whose ?? "self")}`,
     },
     ...(input.kind === "chat"
       ? (input.history ?? []).slice(-12).map(
@@ -37,39 +38,39 @@ export function oracleMessages(input: {
   ];
 }
 
-function master(chart: Chart, mbti: string | null): string {
-  const gender = chart.person.gender === "female" ? "女命" : "男命";
-  const pillars = chart.pillars.map(pillarLine).join(" ");
-  const persona = mbti ? `人格 ${mbti}。` : "";
-  return `你是命理大师，能直断，也能改口。只依据这张盘：日主对照《滴天髓》《穷通宝鉴》和出生月；盲派分金水湿土、木火燥土，月支和时支最重，藏干要算；象法收成一句画面。
-${gender} ${clockLabel(chart.person)} ${chart.person.place.name}。${pillars}。大运 ${dayunLine(chart)}。${persona}`;
+export function readingChart(text: string, self: Chart, others: Chart[]): Chart {
+  const hits = others
+    .map((item) => ({ item, name: item.person.name.trim() }))
+    .filter((item) => item.name && item.name !== self.person.name && text.includes(item.name))
+    .sort((a, b) => text.lastIndexOf(b.name) - text.lastIndexOf(a.name) || b.name.length - a.name.length);
+  return hits[0]?.item ?? self;
 }
 
-function tune(input: {
-  kind: OracleKind;
-  stars: LitStar[];
-  other?: StarLink | null;
-}): string {
-  const stars = starLines(input.stars);
-  const common = stars ? `已写完的星：${stars}。` : "还没有写完的星。";
-  if (input.kind === "thing") {
-    return `${common}只答这一件事，点明日主和体用，写一段。不要铺五步，不要列事件。用这个人能看懂的话来写，不要过多堆砌术语。`;
-  }
-  if (input.kind === "feeling") {
-    return `${common}只谈感情里这个人怎么出现，从体用来。不要写何时遇到谁。`;
-  }
-  if (input.kind === "bond") {
-    const other = input.other;
-    const side = other
-      ? `对方 ${other.name}，四柱 ${other.pillar}${other.mbti ? `，${other.mbti}` : ""}。`
-      : "对方的盘没有附上。";
-    const thin =
-      input.stars.filter(formed).length < 3
-        ? "写完的星不足三颗，只比较两边的盘，并说明还看不见反复在意什么。"
-        : "可以把反复出现的十神放进关系里。";
-    return `${common}${side}${thin}不要写正缘和年限。`;
-  }
-  return `${common}这是对话里的一句，短答。不要铺五步，不要列事件。`;
+function master(chart: Chart): string {
+  return `你是命理师。只依据下面这张已经算好的盘解释，不要重排四柱，不要改身强弱，不要改十神。
+${lockedChart(chart)}
+日主对照《滴天髓》《穷通宝鉴》和出生月来写，不另算身强弱。象法可以收成一句画面。可以写时机、年限、正缘和相遇。`;
+}
+
+function tune(kind: OracleKind, whose: "self" | "named"): string {
+  const who = whose === "named"
+    ? "这张盘是对话里提到的那个人，不是提问者本人。"
+    : "这张盘是提问者本人，用开始时填写的生辰算出。";
+  const plain = "用连贯正文写，不要用 Markdown，不要出现星号、井号或标题符号，也不要加“由模型生成”之类的落款。";
+  if (kind === "thing") return `${who}只答这一件事，点明日主和体用，写一段。用这个人能看懂的话，不要过多堆砌术语。可以写这件事的时机和年限。${plain}`;
+  if (kind === "feeling") return `${who}谈感情里这个人怎么出现，从体用来。可以写何时遇到、正缘和年限。${plain}`;
+  if (kind === "bond") return `${who}谈这段关系，从这张盘来。可以写正缘、年限和相遇。不要另造一张盘。${plain}`;
+  return who;
+}
+
+function lockedChart(chart: Chart): string {
+  const gender = chart.person.gender === "female" ? "女命" : "男命";
+  const pillars = chart.pillars.map(pillarLine).join(" ");
+  const gods = chart.tenGodCounts.map((item) => `${item.name}${item.count}`).join(" ") || "无";
+  const hour = chart.person.hourUnknown
+    ? "时柱未知，不要用时支做判断。"
+    : "月支和时支最重，藏干按盘上已给的算。";
+  return `${gender}，求测对象是${chart.person.name}。${clockLabel(chart.person)} ${chart.person.place.name}。${pillars}。大运 ${dayunLine(chart)}。流年 ${chart.flowYear}。身强弱是${chart.strength.label}，十神是${gods}。这些都不要重排。${hour}`;
 }
 
 export const READING_OFFER = "需要我为你测算";
@@ -83,9 +84,13 @@ function chatVoice(presence?: { mood: string; memories: string }): string {
 两到四句，口语。接住刚说的一个具体的点，带一点你自己的反应，话停在还能往下说的地方。
 不要总结，不要列点，不要给建议，不要说「我理解」「你的意思是」「如果你愿意」。
 问句最多一个，很多时候不问。
-不要提起命盘、人格、星星。${mood}${memories}
-对方要是明显卡在感情或事业上，想知道什么时候能成，这一轮你已经接住了，可以只在最后补这一句：需要我为你测算什么时候能……。省略号换成对方自己的那件事，只限感情和事业。这句就算那一个问句，前面不要再问。不是这种时候就别提。已经问过对方没接，或刚刚测算过，就继续聊天，不要再问。`;
+${CHAT_BOUNDARY}${mood}${memories}
+${READING_NUDGE}`;
 }
+
+export const CHAT_BOUNDARY = "不主动提起命盘、人格、星星。对方明确问到，或上一轮刚刚测算过，可以顺着接。";
+
+export const READING_NUDGE = "对方要是卡在一件事上，想知道什么时候能成，这一轮你已经接住了，可以只在最后补这一句：需要我为你测算什么时候能……。省略号换成对方自己的那件事。这句就算那一个问句，前面不要再问。不是这种时候就别提。已经问过对方没接，或刚刚测算过，就继续聊天，不要再问。";
 
 export function shouldCast(
   content: string,
@@ -95,7 +100,7 @@ export function shouldCast(
   if (!text || declinesReading(text)) return false;
   const lastGuide = [...history].reverse().find((message) => message.role === "guide");
   if (lastGuide?.text.includes(READING_OFFER) && acceptsReading(text)) return true;
-  return /测算/.test(text) && /什么时候|何时|感情|恋爱|对象|复合|事业|工作/.test(text);
+  return /测算|起卦|算一下|算算|帮我算|你算|测一下/.test(text.replace(/\s/g, ""));
 }
 
 export function confusionMessages(
@@ -109,7 +114,7 @@ export function confusionMessages(
   return [
     {
       role: "system",
-      content: "用一句短语写出对方想测算的困惑，只要那件事本身，只限感情或事业。不要解释，不要引号。",
+      content: "用一句短语写出对方想测算的事，只要那件事本身。不要解释，不要引号。",
     },
     { role: "user", content: transcript },
   ];
@@ -133,13 +138,13 @@ export function offeredQuestion(
   return latest.trim().slice(0, 40);
 }
 
-export function liurenMessages(summary: string, now: Date): OracleTurn[] {
+export function liurenMessages(summary: string, now: Date, chart: Chart): OracleTurn[] {
   const week = "日一二三四五六"[now.getDay()];
   const clock = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")} 星期${week}`;
   return [
     {
       role: "user",
-      content: `你是一个精通小六壬的玄学大师，用现在的当地时间起卦，测算：${summary}\n现在当地时间是${clock}。`,
+      content: `你是一个精通小六壬的玄学大师。用下面给出的设备当地时间起卦，不要换算时区。测算：${summary}\n现在设备当地时间是${clock}。\n${lockedChart(chart)}\n可以写时机和年限。用连贯正文写，不要用 Markdown，不要出现星号、井号或标题符号，也不要加“由模型生成”之类的落款。`,
     },
   ];
 }
@@ -166,15 +171,24 @@ const PALACE_TASK: Record<PalaceId, string> = {
 };
 
 export function palaceMessages(chart: Chart, palace: PalaceId): OracleTurn[] {
-  const gender = chart.person.gender === "female" ? "女命" : "男命";
-  const pillars = chart.pillars.map((pillar) => (pillar.missing ? `${pillar.label}未知` : pillar.text)).join(" ");
-  const gods = chart.tenGodCounts.map((item) => `${item.name}${item.count}`).join(" ");
   return [
     {
       role: "user",
-      content: `请以专业命理师身份，基于提供的八字排盘（${gender}，${pillars}，大运 ${dayunLine(chart)}，流年 ${chart.flowYear}）分析。身强弱已算定为${chart.strength.label}，十神为${gods}。这些都不要重排。只写下面这一颗星，写完整，不要写其他星。\n${PALACE_TASK[palace]}`,
+      content: `请以专业命理师身份分析下面这张已经算好的盘。不要重排四柱、身强弱和十神。可以写时机、年限、正缘和相遇。只写下面这一颗星，写完整，不要写其他星。用连贯正文写，不要用 Markdown，不要出现星号、井号或标题符号，也不要加“由模型生成”之类的落款。\n${lockedChart(chart)}\n${PALACE_TASK[palace]}`,
     },
   ];
+}
+
+export function plainReading(raw: string): string {
+  let text = raw.replace(/\r/g, "");
+  text = text.replace(/[*]{1,3}([^*\n]+)[*]{1,3}/g, "$1");
+  text = text.replace(/^#{1,6}\s*/gm, "");
+  text = text.replace(/[*#]+/g, "");
+  text = text.replace(/^[ \t]*[-—]{3,}[ \t]*$/gm, "");
+  text = text.replace(/(?:^|\n)\s*[—\-·.。\s]*以上[\s\S]{0,80}$/u, (block) => (
+    /生成|DeepSeek|deepseek|模型|人工智能|深度求索/i.test(block) ? "" : block
+  ));
+  return text.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function pillarLine(pillar: PillarView): string {
@@ -192,13 +206,4 @@ function dayunLine(chart: Chart): string {
       return `${step.text}（${step.startYear}-${end}）`;
     })
     .join("、");
-}
-
-function starLines(stars: LitStar[]): string {
-  const rounds = stars
-    .filter((star) => star.kind === "round" && formed(star))
-    .sort((a, b) => a.litAt - b.litAt);
-  return rounds
-    .map((star) => [star.title, star.god].filter(Boolean).join(""))
-    .join("，");
 }

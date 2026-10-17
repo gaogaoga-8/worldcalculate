@@ -13,13 +13,17 @@ import {
   type BirthSelection,
   type LocationSelection,
 } from "./BirthFields";
+import { returnStar } from "../account";
+import { StarClaim } from "./StarClaim";
 
 export function IntakeChat({
   onDone,
   onBack,
+  onReturned,
 }: {
   onDone: (person: Person) => void;
   onBack?: () => void;
+  onReturned?: () => void;
 }) {
   const self = useAppState().self;
   const region = PROVINCES.find((p) =>
@@ -65,6 +69,7 @@ export function IntakeChat({
   const [active, setActive] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [joining, setJoining] = useState(false);
+  const [claim, setClaim] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const city = selectedCity(location);
@@ -158,9 +163,24 @@ export function IntakeChat({
         ))}
       </div>
       {active === null && !joining && (
-        <p className="intake-hint">
-          {done.some(Boolean) ? "还有星星在等你" : "点一颗星，开始"}
-        </p>
+        <div className="intake-hint">
+          <p>{done.some(Boolean) ? "还有星星在等你" : "点一颗星，开始"}</p>
+          {!done.some(Boolean) && (
+            <button type="button" className="text-action" onClick={() => setClaim(true)}>
+              认回这颗星
+            </button>
+          )}
+        </div>
+      )}
+      {claim && (
+        <StarClaim
+          intent="return"
+          onClose={() => setClaim(false)}
+          onSubmit={async (name, secret) => {
+            await returnStar(name, secret);
+            onReturned?.();
+          }}
+        />
       )}
       {onBack && (
         <button

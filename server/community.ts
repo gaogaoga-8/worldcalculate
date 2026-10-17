@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { randomBytes, randomUUID, createHash } from "node:crypto";
+import { randomBytes, randomUUID, createHash, scryptSync, timingSafeEqual } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -65,9 +65,12 @@ export function createCommunity(
     ["created_at", "created_at INTEGER"],
     ["updated_at", "updated_at INTEGER NOT NULL DEFAULT 0"],
     ["last_seen_at", "last_seen_at INTEGER"],
+    ["login_name", "login_name TEXT"],
+    ["password_hash", "password_hash TEXT"],
   ] as const) {
     if (!have.has(name)) db.exec(`ALTER TABLE users ADD COLUMN ${definition}`);
   }
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS users_login_name ON users(login_name) WHERE login_name IS NOT NULL");
   db.exec(`
     CREATE TABLE IF NOT EXISTS stars(
       id TEXT PRIMARY KEY,
@@ -197,12 +200,14 @@ export function createCommunity(
     zi_hour: string | null;
     restore_hash: string | null;
     updated_at: number | null;
+    password_hash: string | null;
+    login_name: string | null;
   };
   function accountRow(id: string) {
     return db.prepare("SELECT * FROM users WHERE id=?").get(id) as UserRow | undefined;
   }
   function sessionUser(row: UserRow) {
-    return { id: row.id, name: row.name, birth: row.birth_year != null, updatedAt: row.updated_at || 0 };
+    return { id: row.id, name: row.name, birth: row.birth_year != null, login: Boolean(row.login_name), updatedAt: row.updated_at || 0 };
   }
   function recordEvent(userId: string, kind: unknown, at: number) {
     if (kind !== "open" && kind !== "edit" && kind !== "import") return;
@@ -453,6 +458,50 @@ export function createCommunity(
         cookie(res, token, 365 * 86400);
         send({ user: u });
         return;
+      }
+      if (path === "/login" && method === "POST") {
+        limited(`login:${clientAddress(req)}`, 10, 15 * 60000);
+        const body = await readJson(req);
+        const loginName = clean(body.name, 24);
+        const secret = typeof body.secret === "string" ? body.secret : "";
+        if (secret.length < 4 || secret.length > 64) throw new ApiError(400, "那句话再长一点。");
+        const now = Date.now();
+        if (body.intent === "open") {
+          const taken = db.prepare("SELECT id FROM users WHERE login_name=?").get(loginName) as { id: string } | undefined;
+          if (taken) throw new ApiError(409, "这个名字已经留下过了。");
+          const id = randomUUID();
+          db.prepare(
+            "INSERT INTO users (id, name, login_name, password_hash, created_at, updated_at, last_seen_at) VALUES(?,?,?,?,?,?,?)",
+          ).run(id, loginName, loginName, hashPassword(secret), now, now, now);
+          const token = randomBytes(32).toString("base64url");
+          db.prepare("INSERT INTO sessions VALUES(?,?,?)").run(sha(token), id, now + 365 * DAY);
+          cookie(res, token, 365 * 86400);
+          const saved = accountRow(id);
+          send({ user: saved ? sessionUser(saved) : null });
+          return;
+        }
+        if (body.intent === "keep") {
+          const existing = current(req);
+          const row = existing ? accountRow(existing.id) : undefined;
+          if (!row?.birth_year) throw new ApiError(401, "先点亮三颗星。");
+          const taken = db.prepare("SELECT id FROM users WHERE login_name=? AND id!=?").get(loginName, row.id) as { id: string } | undefined;
+          if (taken) throw new ApiError(409, "这个名字已经留下过了。");
+          db.prepare("UPDATE users SET login_name=?, password_hash=?, last_seen_at=? WHERE id=?").run(loginName, hashPassword(secret), now, row.id);
+          const saved = accountRow(row.id);
+          send({ user: saved ? sessionUser(saved) : null });
+          return;
+        }
+        if (body.intent === "return") {
+          const row = db.prepare("SELECT * FROM users WHERE login_name=?").get(loginName) as UserRow | undefined;
+          if (!row?.password_hash || !checkPassword(secret, row.password_hash)) throw new ApiError(404, "对不上这颗星。");
+          const token = randomBytes(32).toString("base64url");
+          db.prepare("INSERT INTO sessions VALUES(?,?,?)").run(sha(token), row.id, now + 365 * DAY);
+          db.prepare("UPDATE users SET last_seen_at=? WHERE id=?").run(now, row.id);
+          cookie(res, token, 365 * 86400);
+          send({ user: sessionUser(row) });
+          return;
+        }
+        throw new ApiError(400, "没听懂。");
       }
       if (path === "/logout" && method === "POST") {
         const token = /(?:^|;\s*)cosmos_session=([^;]+)/.exec(
@@ -810,6 +859,21 @@ function bondText(value: unknown) {
   if (typeof bond.currentMood !== "string" || bond.currentMood.length > 12) return null;
   return JSON.stringify(bond);
 }
+function hashPassword(secret: string) {
+  const salt = randomBytes(16).toString("base64url");
+  const hash = scryptSync(secret, salt, 32).toString("base64url");
+  return `scrypt$${salt}$${hash}`;
+}
+
+function checkPassword(secret: string, stored: string) {
+  const [kind, salt, hash] = stored.split("$");
+  if (kind !== "scrypt" || !salt || !hash) return false;
+  const next = scryptSync(secret, salt, 32);
+  const prev = Buffer.from(hash, "base64url");
+  if (next.length !== prev.length) return false;
+  return timingSafeEqual(next, prev);
+}
+
 function clean(value: unknown, max: number) {
   const text = typeof value === "string" ? value.trim() : "";
   if (!text || text.length > max || /[\u0000-\u0008]/.test(text))
