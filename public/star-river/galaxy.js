@@ -303,7 +303,7 @@
         }
 
         // 伴星。产品上的七颗星盖上来之后，这三颗画面伴星让开。
-        if (this.spawnStart !== null && !this.covered) {
+        if (this.spawnStart !== null && !this.covered && !this.holdCompanions) {
           for (const c of COMPANIONS) {
             let p;
             if (!settled) {

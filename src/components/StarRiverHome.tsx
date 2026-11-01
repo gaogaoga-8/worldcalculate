@@ -107,9 +107,12 @@ export function StarRiverHome({
   cover = false,
   authed = false,
   rounds = [],
+  guide = "done",
+  rehearse = false,
   onReady,
   onPlaced,
   onPick,
+  onGuide,
   onClaim,
 }: {
   person: Person | null;
@@ -118,17 +121,22 @@ export function StarRiverHome({
   cover?: boolean;
   authed?: boolean;
   rounds?: { id: string; title: string }[];
+  guide?: string;
+  rehearse?: boolean;
   onReady: (person: Person) => void;
   onPlaced?: () => void;
-  onPick?: (id: string) => void;
+  onPick?: (id: string, slow?: boolean) => void;
+  onGuide?: (step: string) => void;
   onClaim?: (name: string, secret: string) => Promise<{ ok: boolean; restore?: boolean; message?: string }>;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const roundsRef = useRef(rounds);
   const authedRef = useRef(authed);
+  const rehearseRef = useRef(rehearse);
   const claimRef = useRef(onClaim);
   roundsRef.current = rounds;
   authedRef.current = authed;
+  rehearseRef.current = rehearse;
   claimRef.current = onClaim;
   if (person && !reset) seedGalaxy(person);
   useEffect(() => {
@@ -141,14 +149,15 @@ export function StarRiverHome({
           event: "cities",
           regions: cityPayload(),
         }, "*");
-        frame.current?.contentWindow?.postMessage({ type: "worldcal", event: "auth", needed: !authedRef.current }, "*");
+        frame.current?.contentWindow?.postMessage({ type: "worldcal", event: "auth", needed: rehearseRef.current || !authedRef.current }, "*");
       }
       if (data.event === "settled") {
         const next = personFromRiver(data.values);
         if (next && !samePerson(person, next)) onReady(next);
         onPlaced?.();
       }
-      if (data.event === "pick" && typeof data.id === "string") onPick?.(data.id);
+      if (data.event === "pick" && typeof data.id === "string") onPick?.(data.id, data.slow === true);
+      if (data.event === "guide" && typeof data.step === "string") onGuide?.(data.step);
       if (data.event === "claim" && claimRef.current) {
         const name = String(data.name || "");
         const secret = String(data.secret || "");
@@ -177,18 +186,19 @@ export function StarRiverHome({
       regions: cityPayload(),
     }, "*");
     win.postMessage({ type: "worldcal", event: "rounds", stars: roundsRef.current }, "*");
-    win.postMessage({ type: "worldcal", event: "auth", needed: !authedRef.current }, "*");
+    win.postMessage({ type: "worldcal", event: "auth", needed: rehearse || !authedRef.current }, "*");
+    win.postMessage({ type: "worldcal", event: "guide", step: guide }, "*");
     if (cover) win.postMessage({ type: "worldcal", event: "cover" }, "*");
   };
   const roundKey = rounds.map((star) => `${star.id}:${star.title}`).join("|");
-  useEffect(() => { tellFrame(); }, [roundKey, authed]);
+  useEffect(() => { tellFrame(); }, [roundKey, authed, guide, resetKey, rehearse]);
   useEffect(() => { if (cover) tellFrame(); }, [cover]);
   return (
     <iframe
       key={resetKey}
       ref={frame}
       className="river-frame"
-      src={`/star-river/index.html${reset ? "?reset=1" : ""}`}
+      src={`/star-river/index.html?v=sky21${reset ? `&reset=1${rehearse ? "&rehearse=1" : ""}` : ""}`}
       title="星河"
       onLoad={tellFrame}
     />

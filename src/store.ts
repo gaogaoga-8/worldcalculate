@@ -37,6 +37,8 @@ export type AppState = {
   settings: Settings;
   conjunctionAt: number | null;
   conjunctionAsked: boolean;
+  fateAsked: boolean;
+  fateUses: number;
   memories: MemoryNote[];
   mood: Mood;
   bond: Bond;
@@ -65,6 +67,8 @@ const initial: AppState = {
   settings: { ziHour: "early" },
   conjunctionAt: null,
   conjunctionAsked: false,
+  fateAsked: false,
+  fateUses: 0,
   memories: [],
   mood: { ...REST_MOOD },
   bond: { ...REST_BOND },
@@ -168,6 +172,12 @@ export function hydrate(raw: Partial<AppState>): AppState {
     settings: { ...initial.settings, ...raw.settings },
     conjunctionAt: typeof raw.conjunctionAt === "number" ? raw.conjunctionAt : null,
     conjunctionAsked: raw.conjunctionAsked === true,
+    fateAsked: raw.fateAsked === true,
+    fateUses: typeof raw.fateUses === "number"
+      ? Math.max(0, Math.floor(raw.fateUses))
+      : raw.fateAsked === true
+        ? 1
+        : 0,
     memories: Array.isArray(raw.memories)
       ? raw.memories.filter(isMemory).slice(-18)
       : rememberAll([], Array.isArray(raw.messages) ? raw.messages : []),

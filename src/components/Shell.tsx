@@ -31,11 +31,15 @@ type Props = {
   onReplay?: () => void;
   onEdit?: () => void;
   onCards?: () => void;
+  onDevelop?: () => void;
+  developing?: boolean;
   onTalk?: () => void;
   onChart?: () => void;
   onPalace?: () => void;
   onPersona?: () => void;
   onAsk?: () => void;
+  menuHint?: boolean;
+  onMenuHintDone?: () => void;
   children: ReactNode;
 };
 
@@ -45,11 +49,15 @@ export function Shell({
   onReplay,
   onEdit,
   onCards,
+  onDevelop,
+  developing = false,
   onTalk,
   onChart,
   onPalace,
   onPersona,
   onAsk,
+  menuHint = false,
+  onMenuHintDone,
   children,
 }: Props) {
   const state = useAppState();
@@ -92,6 +100,12 @@ export function Shell({
           >
             ···
           </button>
+          {menuHint && !menu && (
+            <p className="menu-hint">
+              这三个点里，可以重录星图，也可以看别人的星图。
+              <button type="button" onClick={onMenuHintDone}>好</button>
+            </p>
+          )}
           {menu && (
             <>
               <button
@@ -146,6 +160,14 @@ export function Shell({
                       }}
                     >
                       重新录入
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMenu(false);
+                        onDevelop?.();
+                      }}
+                    >
+                      {developing ? "结束开发模式" : "开发模式"}
                     </button>
                     <button onClick={exportJson}>导出</button>
                     <button
