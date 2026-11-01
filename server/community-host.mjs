@@ -47,6 +47,8 @@ function createCommunity(file = process.env.COMMUNITY_DB || resolve(".data/commu
     ["round_turns", "round_turns INTEGER NOT NULL DEFAULT 0"],
     ["conjunction_at", "conjunction_at INTEGER"],
     ["conjunction_asked", "conjunction_asked INTEGER NOT NULL DEFAULT 0"],
+    ["fate_asked", "fate_asked INTEGER NOT NULL DEFAULT 0"],
+    ["fate_uses", "fate_uses INTEGER"],
     ["zi_hour", "zi_hour TEXT"],
     ["restore_hash", "restore_hash TEXT"],
     ["created_at", "created_at INTEGER"],
@@ -251,6 +253,8 @@ function createCommunity(file = process.env.COMMUNITY_DB || resolve(".data/commu
       roundTurns: row.round_turns || 0,
       conjunctionAt: row.conjunction_at,
       conjunctionAsked: row.conjunction_asked === 1,
+      fateAsked: row.fate_asked === 1,
+      fateUses: row.fate_uses == null ? (row.fate_asked === 1 ? 1 : 0) : row.fate_uses,
       ziHour: row.zi_hour === "late" ? "late" : "early",
       person: {
         id: "self",
@@ -451,12 +455,16 @@ function createCommunity(file = process.env.COMMUNITY_DB || resolve(".data/commu
         );
       }
       db.prepare(
-        "UPDATE users SET galaxy_id=?, round_turns=?, conjunction_at=?, conjunction_asked=?, zi_hour=?, updated_at=? WHERE id=?"
+        "UPDATE users SET galaxy_id=?, round_turns=?, conjunction_at=?, conjunction_asked=?, fate_asked=CASE WHEN ? IS NULL THEN fate_asked ELSE ? END, fate_uses=CASE WHEN ? IS NULL THEN fate_uses ELSE ? END, zi_hour=?, updated_at=? WHERE id=?"
       ).run(
         textOrNull(body.galaxyId, 80),
         typeof body.roundTurns === "number" ? Math.max(0, Math.floor(body.roundTurns)) : 0,
         typeof body.conjunctionAt === "number" ? body.conjunctionAt : null,
         body.conjunctionAsked === true ? 1 : 0,
+        typeof body.fateAsked === "boolean" ? (body.fateAsked ? 1 : 0) : null,
+        typeof body.fateAsked === "boolean" ? (body.fateAsked ? 1 : 0) : null,
+        typeof body.fateUses === "number" ? Math.max(0, Math.floor(body.fateUses)) : null,
+        typeof body.fateUses === "number" ? Math.max(0, Math.floor(body.fateUses)) : null,
         body.ziHour === "late" ? "late" : "early",
         now,
         userId

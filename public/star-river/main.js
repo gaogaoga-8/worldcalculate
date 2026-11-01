@@ -216,7 +216,229 @@
     sky.base = c; sky.atlas = atlas; sky.n = m;
   }
 
+  function cloneCanvas(src) {
+    const copy = document.createElement('canvas');
+    copy.width = src.width;
+    copy.height = src.height;
+    const g = copy.getContext('2d');
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(src, 0, 0);
+    return copy;
+  }
+
+  // 和点亮视频同一套三帧：稀星、星点银河、满天原图。在工作分辨率上画，不嵌那条 480p。
+  function buildRelightPlates(full) {
+    const w = full.width, h = full.height, n = w * h;
+    const src = full.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, w, h);
+    const d = src.data;
+    const L = new Float32Array(n);
+    for (let i = 0; i < n; i++) L[i] = Math.max(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]);
+    const mean = boxMean(L, w, h, 4);
+    const hash = (x, y) => {
+      let v = Math.imul(x, 374761393) + Math.imul(y, 668265263);
+      v = Math.imul(v ^ (v >>> 13), 1274126177);
+      return (v ^ (v >>> 16)) >>> 0;
+    };
+    const stamp = (mode) => {
+      const out = new Uint8ClampedArray(d.length);
+      for (let i = 0; i < n; i++) out[i * 4 + 3] = 255;
+      const put = (x, y, k) => {
+        if (x < 0 || y < 0 || x >= w || y >= h || k <= 0) return;
+        const o = (y * w + x) * 4;
+        out[o] = Math.min(255, d[o] * k);
+        out[o + 1] = Math.min(255, d[o + 1] * k);
+        out[o + 2] = Math.min(255, d[o + 2] * k);
+      };
+      for (let i = 0; i < n; i++) {
+        const peak = L[i] - mean[i];
+        const x = i % w, y = (i / w) | 0;
+        if (mode === 0) {
+          if (mean[i] > 34) continue;
+          if (peak > 16 && L[i] > 46 && hash(x, y) % 3 !== 0) put(x, y, Math.min(1, peak / 48));
+        } else if (peak > 12 && L[i] > 36) {
+          put(x, y, Math.min(1, peak / 42));
+        }
+      }
+      if (mode === 1) {
+        const cell = 3;
+        for (let y = 0; y < h; y += cell) {
+          for (let x = 0; x < w; x += cell) {
+            const hsh = hash(x, y);
+            const xx = Math.min(w - 1, x + (hsh % cell));
+            const yy = Math.min(h - 1, y + ((hsh >>> 8) % cell));
+            const i = yy * w + xx;
+            if (mean[i] < 28) continue;
+            const bright = Math.min(1, (mean[i] - 28) / 72);
+            if ((hsh % 1000) / 1000 > bright) continue;
+            const k = 0.55 + 0.45 * bright;
+            put(xx, yy, k);
+            if (bright > 0.72) put(xx + 1, yy, k * 0.85);
+          }
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').putImageData(new ImageData(out, w, h), 0, 0);
+      return canvas;
+    };
+    sky.sparse = stamp(0);
+    sky.points = stamp(1);
+  }
+
   let skyT = 0, skyDirty = true, lastSky = 0;
+  // 0 是满天银河，1 是只留下拆出来的稀星。新来的人先看见满的，再慢慢收回去。
+  let veil = 1;
+  let glimpse = null;
+  let relight = null;
+
+  function earnedVeil() {
+    const n = galaxy ? galaxy.count : 0;
+    return clamp(1 - n / 36);
+  }
+
+  function beginGlimpse() {
+    veil = 0;
+    const line = document.createElement('p');
+    line.className = 'later';
+    line.textContent = '这是它以后的样子。';
+    document.body.append(line);
+    requestAnimationFrame(() => line.classList.add('show'));
+    glimpse = { t0: performance.now(), hold: 2400, fade: 6200, line };
+    skyDirty = true;
+  }
+
+  function stepGlimpse(now) {
+    if (!glimpse) return;
+    const elapsed = now - glimpse.t0;
+    if (elapsed < glimpse.hold) {
+      veil = 0;
+      return;
+    }
+    const u = clamp((elapsed - glimpse.hold) / glimpse.fade);
+    const e = u * u * (3 - 2 * u);
+    veil = lerp(0, earnedVeil(), e);
+    if (u > 0.2) glimpse.line.classList.add('leave');
+    if (u >= 1) {
+      veil = earnedVeil();
+      glimpse.line.remove();
+      glimpse = null;
+      offerRelight();
+    }
+  }
+
+  function offerRelight() {
+    if (document.querySelector('.relight')) return;
+    const box = document.createElement('div');
+    box.className = 'relight';
+    const line = document.createElement('p');
+    line.textContent = '现在重新点亮你的星河';
+    const yes = document.createElement('button');
+    yes.type = 'button';
+    yes.textContent = '愿意';
+    yes.addEventListener('click', () => {
+      box.classList.add('leave');
+      beginRelight();
+      setTimeout(() => box.remove(), 700);
+    });
+    box.append(line, yes);
+    document.body.append(box);
+    requestAnimationFrame(() => box.classList.add('show'));
+  }
+
+  function beginRelight() {
+    if (document.querySelector('.relight-video')) return;
+    const video = document.createElement('video');
+    video.className = 'relight-video';
+    video.src = 'assets/relight.mp4';
+    video.playsInline = true;
+    video.muted = true;
+    video.setAttribute('playsinline', '');
+    document.body.classList.add('relighting');
+    document.body.append(video);
+    const fit = () => placeRelightVideo(video);
+    video.addEventListener('loadedmetadata', fit);
+    addEventListener('resize', fit);
+    fit();
+    const done = () => {
+      removeEventListener('resize', fit);
+      video.classList.add('leave');
+      setTimeout(() => {
+        video.remove();
+        document.body.classList.remove('relighting');
+        openCoreSlow();
+      }, 6800);
+    };
+    video.addEventListener('ended', done);
+    video.play().catch(done);
+  }
+
+  function openCoreSlow() {
+    const invite = '现在跟本命星对话，来点亮星河···';
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'star-river', event: 'pick', id: 'core', slow: true }, '*');
+      return;
+    }
+    if (document.querySelector('.core-invite')) return;
+    const panel = document.createElement('section');
+    panel.className = 'core-invite';
+    panel.innerHTML = `<header><i></i><h1>本命</h1></header><p>${invite}</p>`;
+    document.body.append(panel);
+  }
+
+  function stepRelight(now) {
+    if (!relight) return;
+    const t = now - relight.t0;
+    const toPoints = 3000;
+    const toFull = 3000;
+    const hold = 1400;
+    const sink = 4800;
+    if (t < toPoints) {
+      relight.layers = [['sparse', 1], ['points', smooth(t / toPoints)]];
+    } else if (t < toPoints + toFull) {
+      relight.layers = [['points', 1], ['full', smooth((t - toPoints) / toFull)]];
+    } else if (t < toPoints + toFull + hold) {
+      relight.layers = [['full', 1]];
+    } else if (t < toPoints + toFull + hold + sink) {
+      const u = smooth((t - toPoints - toFull - hold) / sink);
+      relight.layers = [['live', 1], ['full', 1 - u]];
+    } else {
+      veil = earnedVeil();
+      relight = null;
+    }
+  }
+
+  function smooth(u) {
+    u = clamp(u);
+    return u * u * (3 - 2 * u);
+  }
+
+  function fitSky() {
+    const wide = W / H > sky.w / sky.h;
+    const k = wide ? H / sky.h : Math.max(W / sky.w, H / sky.h);
+    const dw = sky.w * k, dh = sky.h * k;
+    return { wide, k, dw, dh, ox: (W - dw) / 2, oy: (H - dh) / 2 };
+  }
+
+  function placeRelightVideo(video) {
+    if (!sky.w || !sky.h) return;
+    const { dw, dh, ox, oy } = fitSky();
+    const Ap = sky.w / sky.h;
+    const Av = (video.videoWidth || 480) / (video.videoHeight || 848);
+    let sx = 0, sy = 0, sw = 1, sh = 1;
+    if (Ap > Av + 0.001) {
+      sw = Av / Ap;
+      sx = (1 - sw) / 2;
+    } else if (Av > Ap + 0.001) {
+      sh = Ap / Av;
+      sy = (1 - sh) / 2;
+    }
+    video.style.left = `${ox + dw * sx}px`;
+    video.style.top = `${oy + dh * sy}px`;
+    video.style.width = `${dw * sw}px`;
+    video.style.height = `${dh * sh}px`;
+  }
 
   function drawSky() {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -225,11 +447,20 @@
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, W, H);
     if (!sky.base) return;
-    const wide = W / H > sky.w / sky.h;
-    const k = wide ? H / sky.h : Math.max(W / sky.w, H / sky.h);
-    const dw = sky.w * k, dh = sky.h * k;
-    const ox = (W - dw) / 2, oy = (H - dh) / 2;
+    const { wide, k, dw, dh, ox, oy } = fitSky();
+    if (relight && sky.full && sky.points && sky.sparse) {
+      drawRelight(ox, oy, dw, dh, k);
+      if (wide && ox > 1) fadeSides(ox, dw);
+      return;
+    }
     ctx.drawImage(sky.base, ox, oy, dw, dh);
+    if (veil > 0.004) {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = veil;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
+    }
     if (sky.n) {
       ctx.globalCompositeOperation = 'lighter';
       const t = skyT, A = sky.atlas;
@@ -243,6 +474,38 @@
       }
     }
     if (wide && ox > 1) fadeSides(ox, dw);
+  }
+
+  function drawRelight(ox, oy, dw, dh, k) {
+    const layers = relight.layers || [['full', 1]];
+    layers.forEach(([name, alpha], index) => {
+      const cover = index === 0 ? 1 : alpha;
+      if (cover < 0.004) return;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = cover;
+      if (name === 'live') {
+        ctx.drawImage(sky.base, ox, oy, dw, dh);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, W, H);
+        if (sky.n && S) {
+          ctx.globalCompositeOperation = 'lighter';
+          const t = skyT, A = sky.atlas;
+          for (let j = 0; j < sky.n; j++) {
+            const ang = S.om[j] * t + S.ph[j];
+            const ex = Math.cos(ang) * S.ax[j] - S.ox[j], ey = Math.sin(ang) * S.ay[j] - S.oy[j];
+            const dx = ex * S.cr[j] - ey * S.sr[j], dy = ex * S.sr[j] + ey * S.cr[j];
+            ctx.globalAlpha = 1 - S.td[j] * (0.5 - 0.5 * Math.cos(S.tw[j] * t));
+            const sw = S.w[j], sh = S.h[j];
+            ctx.drawImage(A, S.sx[j], S.sy[j], sw, sh, ox + (S.x[j] + dx) * k, oy + (S.y[j] + dy) * k, sw * k, sh * k);
+          }
+        }
+        return;
+      }
+      const plate = sky[name];
+      if (plate) ctx.drawImage(plate, ox, oy, dw, dh);
+    });
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
   }
 
   function fadeSides(ox, dw) {
@@ -610,6 +873,8 @@
     stageIndex = -1;
     document.body.classList.remove('playing');
     nameSeven();
+    beginGlimpse();
+    if (fateWanted) beginFateGather();
     const values = Object.fromEntries(seeds.map((s) => [s.key, s.value]));
     window.parent.postMessage({ type: 'star-river', event: 'settled', values }, '*');
   }
@@ -686,25 +951,94 @@
     const pts = seeds.map((s) => ({ x: s.state.x * W, y: s.state.y * H }));
     if (galaxy) pts.push(...galaxy.companionPoints());
     if (!pts.length) return;
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const p of pts) {
-      minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
-      minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
-    }
     const els = [...dailyEls.values()].sort((a, b) => Number(a.dataset.index) - Number(b.dataset.index));
     const n = els.length;
     if (!n) return;
-    const top = minY - 36;
+    let cx = 0, cy = 0;
+    for (const p of pts) { cx += p.x; cy += p.y; }
+    cx /= pts.length;
+    cy /= pts.length;
+    const field = [
+      [-1.35, -0.95],
+      [-0.48, -1.55],
+      [0.55, -1.18],
+      [1.32, -0.72],
+      [-1.62, -0.22],
+      [1.58, -0.12],
+      [0.05, -1.92],
+    ];
+    const unit = Math.min(W, H) * 0.16;
     els.forEach((el, i) => {
-      const span = Math.min(W - 72, Math.max(maxX - minX, (n - 1) * 64));
-      const mid = (minX + maxX) / 2;
-      const start = mid - span / 2;
-      const step = n === 1 ? 0 : span / (n - 1);
-      const x = Math.min(W - 36, Math.max(36, n === 1 ? mid : start + step * i));
-      const y = Math.min(H - 28, Math.max(22, top >= 22 ? top : minY + ((maxY - minY) * (i + 1)) / (n + 1)));
+      const [fx, fy] = field[i % field.length];
+      const x = Math.min(W - 56, Math.max(56, cx + fx * unit));
+      const y = Math.min(H * 0.46, Math.max(36, cy + fy * unit));
       el.classList.toggle('flip', x > W * 0.72);
       el.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`;
     });
+  }
+
+  let guideStep = '';
+
+  function setGuideTip(step) {
+    guideStep = step;
+    let tip = document.querySelector('.sky-tip');
+    if (step !== 'six' && step !== 'core') {
+      tip?.remove();
+      return;
+    }
+    if (!tip) {
+      tip = document.createElement('div');
+      tip.className = 'sky-tip';
+      const line = document.createElement('p');
+      const ok = document.createElement('button');
+      ok.type = 'button';
+      ok.textContent = '好';
+      ok.addEventListener('click', () => {
+        const next = guideStep === 'six' ? 'core' : 'echo';
+        window.parent.postMessage({ type: 'star-river', event: 'guide', step: next }, '*');
+        setGuideTip(next);
+      });
+      tip.append(line, ok);
+      document.body.append(tip);
+    }
+    const line = tip.querySelector('p');
+    const ok = tip.querySelector('button');
+    if (line) {
+      line.textContent = step === 'six'
+        ? '这六颗星，是八字给出的人生。'
+        : '这颗是本命。在这里聊天，可以认识自己。';
+    }
+    if (ok) ok.hidden = false;
+  }
+
+  function placeGuide() {
+    const tip = document.querySelector('.sky-tip');
+    if (!tip) return;
+    const busy = !new URLSearchParams(location.search).has('rehearse') && document.querySelector('.later, .relight-video');
+    if (!document.body.classList.contains('named') || busy || (guideStep !== 'six' && guideStep !== 'core')) {
+      tip.hidden = true;
+      return;
+    }
+    tip.hidden = false;
+    let x = W * 0.5;
+    let y = H * 0.22;
+    if (guideStep === 'core' && byKey.sign) {
+      x = byKey.sign.state.x * W + 36;
+      y = byKey.sign.state.y * H - 18;
+    } else {
+      const pts = [];
+      for (const key of ['origin', 'birth']) {
+        const star = byKey[key];
+        if (star) pts.push({ x: star.state.x * W, y: star.state.y * H });
+      }
+      if (galaxy) pts.push(...galaxy.companionPoints());
+      if (pts.length) {
+        x = pts.reduce((sum, point) => sum + point.x, 0) / pts.length - 88;
+        y = Math.min(...pts.map((point) => point.y)) - 86;
+      }
+    }
+    tip.style.left = `${Math.min(W - tip.offsetWidth - 12, Math.max(12, x))}px`;
+    tip.style.top = `${Math.min(H - 72, Math.max(12, y))}px`;
   }
 
   function renderDaily() {
@@ -739,6 +1073,90 @@
     placeDaily();
   }
 
+  let fate = null;
+  let fateWanted = false;
+  let fatePlayed = false;
+
+  function readStarPos(el) {
+    const match = /translate3d\(([-\d.]+)px,\s*([-\d.]+)px/.exec(el.style.transform || "");
+    if (match) return { x: Number(match[1]), y: Number(match[2]) };
+    const box = el.getBoundingClientRect();
+    return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+  }
+
+  function beginFateGather() {
+    if (fate || fatePlayed) return;
+    if (phase !== "settled" || !byKey.sign) {
+      fateWanted = true;
+      return;
+    }
+    fateWanted = false;
+    fatePlayed = true;
+    if (galaxy) galaxy.holdCompanions = true;
+    for (const el of members) {
+      if (el.querySelector(".core")) continue;
+      const core = document.createElement("i");
+      core.className = "core";
+      core.dataset.gather = "1";
+      el.prepend(core);
+    }
+    const center = readStarPos(byKey.sign.el);
+    const nodes = [byKey.sign.el, byKey.origin.el, byKey.birth.el, ...members, ...dailyEls.values()];
+    fate = {
+      cx: center.x,
+      cy: center.y,
+      start: performance.now(),
+      glow: null,
+      items: nodes.map((el, index) => {
+        const point = readStarPos(el);
+        const dx = point.x - center.x;
+        const dy = point.y - center.y;
+        return {
+          el,
+          angle: Math.atan2(dy, dx),
+          radius: Math.hypot(dx, dy) || (index === 0 ? 0 : 36),
+        };
+      }),
+    };
+    const glow = document.createElement("div");
+    glow.className = "fate-warm";
+    glow.style.left = `${center.x}px`;
+    glow.style.top = `${center.y}px`;
+    document.body.append(glow);
+    fate.glow = glow;
+  }
+
+  function stepFate(now) {
+    if (!fate) return;
+    const duration = reduced ? 500 : 7200;
+    const flash = reduced ? 200 : 1700;
+    const pull = Math.min(1, (now - fate.start) / duration);
+    const ease = pull * pull * pull;
+    const nameOpacity = Math.max(0, 1 - ease / 0.62);
+    for (const item of fate.items) {
+      const radius = item.radius * (1 - ease);
+      const angle = item.angle + ease * Math.PI * 1.2;
+      const x = fate.cx + Math.cos(angle) * radius;
+      const y = fate.cy + Math.sin(angle) * radius * 0.72;
+      item.el.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`;
+      for (const name of item.el.querySelectorAll(".name")) name.style.opacity = String(nameOpacity);
+    }
+    const after = now - fate.start - duration;
+    if (fate.glow) {
+      const glow = after <= 0 ? ease * 0.2 : Math.sin(Math.min(1, after / flash) * Math.PI);
+      fate.glow.style.opacity = String(Math.max(0, glow));
+    }
+    if (after < flash) return;
+    fate.glow.remove();
+    for (const item of fate.items) {
+      for (const name of item.el.querySelectorAll(".name")) name.style.opacity = "";
+    }
+    for (const el of members) el.querySelector(".core[data-gather]")?.remove();
+    if (galaxy) galaxy.holdCompanions = false;
+    fate = null;
+    window.parent.postMessage({ type: "star-river", event: "fate-gathered" }, "*");
+  }
+
   function placeSeeds() {
     for (const s of seeds) {
       const st = s.state;
@@ -767,12 +1185,18 @@
       galaxy.update(dt, !reduced);
       for (const s of seeds) s.state = galaxy.orbitState(s.key);
     }
-    placeSeeds();
-    placeMembers();
-    placeDaily();
+    if (fate) stepFate(now);
+    else {
+      placeSeeds();
+      placeMembers();
+      placeDaily();
+      placeGuide();
+    }
 
     if (!reduced) skyT += dt;
-    if (skyDirty || (!reduced && sky.n && now - lastSky > 30)) {
+    if (glimpse) stepGlimpse(now);
+    if (relight) stepRelight(now);
+    if (skyDirty || (!reduced && (sky.n || glimpse || relight) && now - lastSky > 30)) {
       drawSky();
       lastSky = now;
       skyDirty = false;
@@ -815,7 +1239,7 @@
   }
 
   function save() {
-    if (!galaxy) return;
+    if (!galaxy || new URLSearchParams(location.search).has('rehearse')) return;
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify({
         values: Object.fromEntries(seeds.map((s) => {
@@ -824,6 +1248,7 @@
           return [s.key, value];
         })),
         chats: galaxy.grown.map((g) => g.h),
+        glimpsed: true,
       }));
     } catch (err) { /* 隐私模式下不可写，星系仅保留在本次会话 */ }
   }
@@ -841,8 +1266,10 @@
     buildGalaxy(data.chats || []);
     galaxy.spawnStart = -Infinity;
     phase = 'settled';
+    veil = earnedVeil();
     document.body.classList.add('locked');
     nameSeven();
+    if (fateWanted) beginFateGather();
     window.parent.postMessage({ type: 'star-river', event: 'settled', values: data.values }, '*');
   }
 
@@ -851,6 +1278,8 @@
     chat(text) {
       if (!galaxy || phase !== 'settled') return false;
       galaxy.addChat(text);
+      if (!glimpse) veil = earnedVeil();
+      skyDirty = true;
       save();
       return true;
     },
@@ -872,6 +1301,7 @@
       }
     }
     if (data.event === 'auth') {
+      if (phase !== 'input') return;
       authNeeded = data.needed !== false;
       applyAuth();
     }
@@ -885,6 +1315,8 @@
       dailyStars = data.stars.filter((star) => star && star.id && star.title).slice(0, 7);
       renderDaily();
     }
+    if (data.event === 'fate-gather') beginFateGather();
+    if (data.event === 'guide' && typeof data.step === 'string') setGuideTip(data.step);
     if (data.event === 'cover') {
       document.body.classList.add('covered');
       if (galaxy) galaxy.covered = true;
@@ -897,7 +1329,13 @@
     try { localStorage.removeItem(STORE_KEY); } catch (err) { /* ignore */ }
   }
   fillBirth(byKey.birth);
-  restore();
+  const previewGlimpse = params.has('glimpse');
+  if (previewGlimpse) {
+    try { localStorage.removeItem(STORE_KEY); } catch (err) { /* 预览不碰已经留下的星 */ }
+  } else {
+    restore();
+  }
+  if (phase === 'input') veil = 0;
 
   if (params.has('debug')) {
     const btn = document.createElement('button');
@@ -925,6 +1363,7 @@
   img.src = 'assets/sky.jpg';
   img.decode().then(() => {
     const plate = gradeSky(img);
+    sky.full = cloneCanvas(plate);
     sky.w = plate.width; sky.h = plate.height;
     sky.base = plate;
     sky.n = 0;
@@ -932,7 +1371,25 @@
     document.body.classList.add('ready');
     setTimeout(() => {
       try { separate(plate); } catch { sky.base = plate; sky.n = 0; }
+      try { if (sky.full) buildRelightPlates(sky.full); } catch { /* 点亮三帧没做成时，仍用原来的黯淡星空。 */ }
       skyDirty = true;
+      if (!previewGlimpse) return;
+      const sample = {
+        origin: { place: '杭州' },
+        birth: { date: '2002-02-01', time: '13:30' },
+        sign: { name: '星', gender: 'female' },
+      };
+      for (const s of seeds) {
+        s.value = sample[s.key];
+        s.done = true;
+        s.el.classList.add('done');
+      }
+      buildGalaxy([]);
+      galaxy.spawnStart = -Infinity;
+      phase = 'settled';
+      document.body.classList.add('locked');
+      nameSeven();
+      beginGlimpse();
     }, 40);
   });
 

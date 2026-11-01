@@ -8,6 +8,9 @@ const RESTORE = "shijie-suanfa/restore";
 const SAVED = "shijie-suanfa/saved-at";
 const DIRTY = "shijie-suanfa/dirty";
 const OPENED = "shijie-suanfa/opened";
+const DEVELOP = "shijie-suanfa/developing";
+const DEVELOP_BACKUP = "shijie-suanfa/develop-backup";
+const DEVELOP_DIRTY = "shijie-suanfa/develop-dirty";
 
 type SessionUser = { id: string; name: string; birth: boolean; login?: boolean; updatedAt: number };
 
@@ -19,6 +22,8 @@ type Sky = {
   roundTurns: number;
   conjunctionAt: number | null;
   conjunctionAsked: boolean;
+  fateAsked?: boolean;
+  fateUses?: number;
   ziHour: "early" | "late";
   person: Person;
   stars: AppState["stars"];
@@ -33,6 +38,37 @@ type Sky = {
 
 let started = false;
 let flight: Promise<Entry> | null = null;
+let holdPush = false;
+
+function rehearsalOn() {
+  return holdPush || localStorage.getItem(DEVELOP) === "1";
+}
+
+export function beginDevelopBackup() {
+  const raw = JSON.stringify(getState());
+  localStorage.setItem(DEVELOP_BACKUP, raw);
+  localStorage.setItem(DEVELOP_DIRTY, localStorage.getItem(DIRTY) || "0");
+  localStorage.setItem(DEVELOP, "1");
+  localStorage.setItem(DIRTY, "0");
+  holdPush = true;
+  window.clearTimeout(timer);
+}
+
+export function restoreDevelopBackup() {
+  holdPush = false;
+  const raw = localStorage.getItem(DEVELOP_BACKUP);
+  const dirty = localStorage.getItem(DEVELOP_DIRTY);
+  localStorage.removeItem(DEVELOP);
+  localStorage.removeItem(DEVELOP_BACKUP);
+  localStorage.removeItem(DEVELOP_DIRTY);
+  if (raw) {
+    try {
+      quietly(() => replaceState(hydrate(JSON.parse(raw) as AppState)));
+    } catch { /* 备份读不回来时，留下现在这份。 */ }
+  }
+  localStorage.setItem(DIRTY, dirty === "1" ? "1" : "0");
+  if (dirty === "1") schedulePush();
+}
 
 export function startAccountSync() {
   if (!started) {
@@ -48,6 +84,7 @@ export function startAccountSync() {
 }
 
 export async function saveAccount(person: Person, kind?: "open" | "edit" | "import") {
+  if (rehearsalOn()) return { user: null, updatedAt: Date.now() };
   const state = getState();
   const saved = await community<{ user: SessionUser | null; restoreKey?: string; updatedAt: number }>(
     "/account",
@@ -120,11 +157,13 @@ export async function restoreAccount(restoreKey: string) {
 
 let timer = 0;
 function schedulePush() {
+  if (rehearsalOn()) return;
   window.clearTimeout(timer);
   timer = window.setTimeout(() => void pushSky().catch(() => window.setTimeout(() => void pushSky().catch(() => {}), 5000)), 800);
 }
 
 async function pushSky() {
+  if (rehearsalOn()) return;
   const state = getState();
   if (!state.self) return;
   await saveAccount(state.self);
@@ -134,6 +173,7 @@ async function pushSky() {
 }
 
 async function reconcile(): Promise<Entry> {
+  if (localStorage.getItem(DEVELOP) === "1") restoreDevelopBackup();
   let session: { user: SessionUser | null };
   try {
     session = await community<{ user: SessionUser | null }>("/session");
@@ -181,6 +221,8 @@ async function pullSky() {
         roundTurns: sky.roundTurns,
         conjunctionAt: sky.conjunctionAt,
         conjunctionAsked: sky.conjunctionAsked,
+        fateAsked: typeof sky.fateAsked === "boolean" ? sky.fateAsked : local.fateAsked,
+        fateUses: typeof sky.fateUses === "number" ? sky.fateUses : local.fateUses,
         settings: { ...local.settings, ziHour: sky.ziHour },
       }),
     );
@@ -213,6 +255,8 @@ function skyBody(state: AppState) {
     roundTurns: state.roundTurns,
     conjunctionAt: state.conjunctionAt,
     conjunctionAsked: state.conjunctionAsked,
+    fateAsked: state.fateUses > 0,
+    fateUses: state.fateUses,
     ziHour: state.settings.ziHour,
     stars: state.stars,
     messages: state.messages.slice(-300),

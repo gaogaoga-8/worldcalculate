@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildChart, type Chart } from "../bazi/chart";
-import { opening, promptsFor, type ChatContext } from "../chat";
+import { opening, promptsFor, STAR_PROMPTS, type ChatContext } from "../chat";
 import { WaitStar } from "./WaitStar";
 import { askOracle } from "../oracle/client";
 import {
@@ -33,6 +33,9 @@ export function ChatView({
   minimal = false,
   presence = false,
   onUserSend,
+  invite,
+  promptGuide = false,
+  onPromptGuideDone,
 }: {
   chart: Chart;
   embedded?: boolean;
@@ -40,11 +43,15 @@ export function ChatView({
   minimal?: boolean;
   presence?: boolean;
   onUserSend?: (text: string) => void;
+  invite?: string;
+  promptGuide?: boolean;
+  onPromptGuideDone?: () => void;
 }) {
   const state = useAppState();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [fault, setFault] = useState("");
+  const [promptsOpen, setPromptsOpen] = useState(false);
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 15000);
@@ -198,6 +205,13 @@ export function ChatView({
     }
   }
 
+  useEffect(() => {
+    if (!promptsOpen) return;
+    const close = () => setPromptsOpen(false);
+    window.addEventListener("pointerdown", close);
+    return () => window.removeEventListener("pointerdown", close);
+  }, [promptsOpen]);
+
   const onlyReach = state.messages.length > 0 && state.messages.every((message) => message.reach);
   const talk = (
     <>
@@ -258,6 +272,13 @@ export function ChatView({
           </p>
         )}
       </div>
+      {invite ? <p className="chat-invite">{invite}</p> : null}
+      {promptGuide ? (
+        <p className="prompt-guide">
+          点这颗星，可以用现成的话来问。
+          <button type="button" onClick={onPromptGuideDone}>好</button>
+        </p>
+      ) : null}
       {busy ? (
         <WaitStar pace="chat" />
       ) : (
@@ -275,6 +296,39 @@ export function ChatView({
               minimal ? "说点什么…" : `对${starName}说说，今天你在想什么…`
             }
           />
+          {starName === "本命" && !minimal && (
+            <div className="prompt-star" onPointerDown={(event) => event.stopPropagation()}>
+              <button
+                className="prompt-star-btn"
+                type="button"
+                aria-label="可以这样问"
+                aria-expanded={promptsOpen}
+                onClick={() => {
+                  if (promptGuide) onPromptGuideDone?.();
+                  setPromptsOpen((open) => !open);
+                }}
+              >
+                ✦
+              </button>
+              {promptsOpen && (
+                <div className="prompt-star-list" role="menu">
+                  {STAR_PROMPTS.map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setPromptsOpen(false);
+                        send(prompt);
+                      }}
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <button
             className="primary"
             aria-label="发送"
