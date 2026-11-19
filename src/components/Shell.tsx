@@ -31,6 +31,8 @@ type Props = {
   onReplay?: () => void;
   onEdit?: () => void;
   onCards?: () => void;
+  onDevelop?: () => void;
+  developing?: boolean;
   onTalk?: () => void;
   onChart?: () => void;
   onPalace?: () => void;
@@ -47,6 +49,8 @@ export function Shell({
   onReplay,
   onEdit,
   onCards,
+  onDevelop,
+  developing = false,
   onTalk,
   onChart,
   onPalace,
@@ -151,6 +155,14 @@ export function Shell({
                       }}
                     >
                       重新录入
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMenu(false);
+                        onDevelop?.();
+                      }}
+                    >
+                      {developing ? "结束开发模式" : "开发模式"}
                     </button>
                     <button onClick={exportJson}>导出</button>
                     <button
