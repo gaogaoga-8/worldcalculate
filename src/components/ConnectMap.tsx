@@ -3,7 +3,7 @@ import { useGuest } from "../guest";
 import { SocialSky } from "./SocialSky";
 
 export function ConnectMap({
-  chart,
+  chart: _chart,
   onOpenSelf,
   draft = "",
   onDraftUsed,
@@ -17,9 +17,7 @@ export function ConnectMap({
   return (
     <section className="panel world-echo">
       <SocialSky
-        name={chart.person.name}
         user={guest.user}
-        enter={guest.enter}
         draft={draft}
         homeLabel="回到星图"
         onHome={() => {

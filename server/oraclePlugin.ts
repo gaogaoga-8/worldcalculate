@@ -20,8 +20,11 @@ export function createOracleHandler(allowLocalRelay = false) {
     res.setHeader("content-type", "application/json; charset=utf-8");
     let acquired = false;
     try {
-      const expected = process.env.APP_ORIGIN || `http://${req.headers.host}`;
-      if (req.headers.origin && req.headers.origin !== expected) {
+      const allowed = (process.env.APP_ORIGIN || `http://${req.headers.host}`)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (req.headers.origin && !allowed.includes(req.headers.origin)) {
         res.statusCode = 403;
         res.end(JSON.stringify({ error: "请从这片星空重新进入。" }));
         return;

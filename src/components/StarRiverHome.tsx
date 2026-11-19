@@ -104,33 +104,45 @@ export function StarRiverHome({
   person,
   resetKey = 0,
   reset = false,
+  history = false,
   cover = false,
   authed = false,
   rounds = [],
+  guide = "done",
   onReady,
+  onGuideAnchor,
+  onRelightDone,
   onPlaced,
   onPick,
+  onGuide,
   onClaim,
 }: {
   person: Person | null;
   resetKey?: number;
   reset?: boolean;
+  history?: boolean;
   cover?: boolean;
   authed?: boolean;
   rounds?: { id: string; title: string }[];
+  guide?: string;
   onReady: (person: Person) => void;
+  onGuideAnchor?: (step: string, point: { left: number; right: number; top: number; mid: number } | null) => void;
+  onRelightDone?: () => void;
   onPlaced?: () => void;
-  onPick?: (id: string) => void;
-  onClaim?: (name: string, secret: string) => Promise<{ ok: boolean; restore?: boolean; message?: string }>;
+  onPick?: (id: string, slow?: boolean) => void;
+  onGuide?: (step: string) => void;
+  onClaim?: (name: string, secret: string) => Promise<{ ok: boolean; restore?: boolean; guide?: boolean; message?: string }>;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const roundsRef = useRef(rounds);
   const authedRef = useRef(authed);
   const claimRef = useRef(onClaim);
+  const guideRef = useRef(guide);
   roundsRef.current = rounds;
   authedRef.current = authed;
   claimRef.current = onClaim;
-  if (person && !reset) seedGalaxy(person);
+  guideRef.current = guide;
+  if (history && person) seedGalaxy(person, true);
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const data = event.data;
@@ -143,12 +155,21 @@ export function StarRiverHome({
         }, "*");
         frame.current?.contentWindow?.postMessage({ type: "worldcal", event: "auth", needed: !authedRef.current }, "*");
       }
+      if (data.event === "relight-done") onRelightDone?.();
+      if (data.event === "guide-anchor") {
+        const point = data.point as { left: number; right: number; top: number; mid: number } | null;
+        onGuideAnchor?.(String(data.step || ""), point);
+      }
+      if (data.event === "settled" || data.event === "relight-done") {
+        frame.current?.contentWindow?.postMessage({ type: "worldcal", event: "guide", step: guideRef.current }, "*");
+      }
       if (data.event === "settled") {
         const next = personFromRiver(data.values);
         if (next && !samePerson(person, next)) onReady(next);
         onPlaced?.();
       }
-      if (data.event === "pick" && typeof data.id === "string") onPick?.(data.id);
+      if (data.event === "pick" && typeof data.id === "string") onPick?.(data.id, data.slow === true);
+      if (data.event === "guide" && typeof data.step === "string") onGuide?.(data.step);
       if (data.event === "claim" && claimRef.current) {
         const name = String(data.name || "");
         const secret = String(data.secret || "");
@@ -167,7 +188,7 @@ export function StarRiverHome({
       window.removeEventListener("message", onMessage);
       window.removeEventListener("worldcal-chat", onChat);
     };
-  }, [onReady, onPlaced, onPick, person]);
+  }, [onReady, onGuideAnchor, onRelightDone, onPlaced, onPick, person]);
   const tellFrame = () => {
     const win = frame.current?.contentWindow;
     if (!win) return;
@@ -178,17 +199,19 @@ export function StarRiverHome({
     }, "*");
     win.postMessage({ type: "worldcal", event: "rounds", stars: roundsRef.current }, "*");
     win.postMessage({ type: "worldcal", event: "auth", needed: !authedRef.current }, "*");
+    win.postMessage({ type: "worldcal", event: "guide", step: guide }, "*");
     if (cover) win.postMessage({ type: "worldcal", event: "cover" }, "*");
   };
   const roundKey = rounds.map((star) => `${star.id}:${star.title}`).join("|");
-  useEffect(() => { tellFrame(); }, [roundKey, authed]);
+  useEffect(() => { tellFrame(); }, [roundKey, authed, guide, resetKey]);
   useEffect(() => { if (cover) tellFrame(); }, [cover]);
+  const query = history ? "history=1" : reset ? "reset=1" : "";
   return (
     <iframe
       key={resetKey}
       ref={frame}
       className="river-frame"
-      src={`/star-river/index.html${reset ? "?reset=1" : ""}`}
+      src={`/star-river/index.html?v=sky32${query ? `&${query}` : ""}`}
       title="星河"
       onLoad={tellFrame}
     />

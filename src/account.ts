@@ -1,6 +1,8 @@
 import { community } from "./community";
 import type { Bond } from "./moli/emotion";
+import { REST_BOND } from "./moli/emotion";
 import type { Mood } from "./presence";
+import { REST_MOOD } from "./presence";
 import { getState, hydrate, isPerson, onSave, quietly, replaceState, type AppState } from "./store";
 import type { Person } from "./types";
 
@@ -8,7 +10,6 @@ const RESTORE = "shijie-suanfa/restore";
 const SAVED = "shijie-suanfa/saved-at";
 const DIRTY = "shijie-suanfa/dirty";
 const OPENED = "shijie-suanfa/opened";
-
 type SessionUser = { id: string; name: string; birth: boolean; login?: boolean; updatedAt: number };
 
 export type Entry = "gate" | "intake" | "ready";
@@ -19,6 +20,8 @@ type Sky = {
   roundTurns: number;
   conjunctionAt: number | null;
   conjunctionAsked: boolean;
+  fateAsked?: boolean;
+  fateUses?: number;
   ziHour: "early" | "late";
   person: Person;
   stars: AppState["stars"];
@@ -29,6 +32,7 @@ type Sky = {
   mood: Mood | null;
   bond: Bond | null;
   reachedAt: number | null;
+  raw?: Record<string, unknown> | null;
 };
 
 let started = false;
@@ -73,12 +77,24 @@ export async function openStar(loginName: string, secret: string) {
       self: null,
       galaxyId: "",
       stars: [],
+      links: [],
       messages: [],
+      branchMessages: [],
       memories: [],
-      roundTurns: 0,
+      asks: [],
+      people: [],
+      plans: [],
+      quiz: null,
+      personaSource: null,
       mirror: null,
+      roundTurns: 0,
+      fateUses: 0,
+      fateAsked: false,
       conjunctionAt: null,
       conjunctionAsked: false,
+      reachedAt: null,
+      mood: { ...REST_MOOD },
+      bond: { ...REST_BOND },
     }));
   });
   localStorage.setItem(DIRTY, "0");
@@ -181,6 +197,14 @@ async function pullSky() {
         roundTurns: sky.roundTurns,
         conjunctionAt: sky.conjunctionAt,
         conjunctionAsked: sky.conjunctionAsked,
+        fateAsked: typeof sky.fateAsked === "boolean" ? sky.fateAsked : local.fateAsked,
+        fateUses: typeof sky.fateUses === "number" ? sky.fateUses : local.fateUses,
+        links: Array.isArray(sky.raw?.links) ? sky.raw.links : local.links,
+        plans: Array.isArray(sky.raw?.plans) ? sky.raw.plans : local.plans,
+        quiz: (sky.raw?.quiz as AppState["quiz"]) ?? local.quiz,
+        personaSource: (sky.raw?.personaSource as AppState["personaSource"]) ?? local.personaSource,
+        mirror: typeof sky.raw?.mirror === "string" ? sky.raw.mirror : local.mirror,
+        branchMessages: Array.isArray(sky.raw?.branchMessages) ? sky.raw.branchMessages : local.branchMessages,
         settings: { ...local.settings, ziHour: sky.ziHour },
       }),
     );
@@ -213,6 +237,8 @@ function skyBody(state: AppState) {
     roundTurns: state.roundTurns,
     conjunctionAt: state.conjunctionAt,
     conjunctionAsked: state.conjunctionAsked,
+    fateAsked: state.fateUses > 0,
+    fateUses: state.fateUses,
     ziHour: state.settings.ziHour,
     stars: state.stars,
     messages: state.messages.slice(-300),
@@ -222,6 +248,12 @@ function skyBody(state: AppState) {
     mood: state.mood,
     bond: state.bond,
     reachedAt: state.reachedAt,
+    links: state.links,
+    plans: state.plans,
+    quiz: state.quiz,
+    personaSource: state.personaSource,
+    mirror: state.mirror,
+    branchMessages: state.branchMessages.slice(-200),
   };
 }
 

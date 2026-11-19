@@ -36,6 +36,8 @@ type Props = {
   onPalace?: () => void;
   onPersona?: () => void;
   onAsk?: () => void;
+  menuHint?: boolean;
+  onMenuHintDone?: () => void;
   children: ReactNode;
 };
 
@@ -50,6 +52,8 @@ export function Shell({
   onPalace,
   onPersona,
   onAsk,
+  menuHint = false,
+  onMenuHintDone,
   children,
 }: Props) {
   const state = useAppState();
@@ -71,20 +75,7 @@ export function Shell({
         inert={forming}
         aria-hidden={forming || undefined}
       >
-        <div className="brand">
-          <i className="mark" />
-          <b>世界算法</b>
-        </div>
         <div className="menu-wrap">
-          <button
-            className={`icon-btn music-toggle${music ? "" : " off"}`}
-            type="button"
-            aria-pressed={music}
-            aria-label={music ? "关闭音乐" : "打开音乐"}
-            onClick={() => void toggleMusic()}
-          >
-            ♪
-          </button>
           <button
             className="icon-btn"
             onClick={() => setMenu((v) => !v)}
@@ -92,6 +83,12 @@ export function Shell({
           >
             ···
           </button>
+          {menuHint && !menu && (
+            <p className="menu-hint">
+              这三个点里，可以重录星图，也可以看别人的星图。
+              <button type="button" onClick={onMenuHintDone}>好</button>
+            </p>
+          )}
           {menu && (
             <>
               <button
@@ -100,6 +97,14 @@ export function Shell({
                 onClick={() => setMenu(false)}
               />
               <div className="menu">
+                <button
+                  className={music ? "on" : ""}
+                  type="button"
+                  aria-pressed={music}
+                  onClick={() => void toggleMusic()}
+                >
+                  {music ? "♪ 音乐开" : "♪ 音乐关"}
+                </button>
                 <p>子时</p>
                 <button
                   className={state.settings.ziHour === "early" ? "on" : ""}

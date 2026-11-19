@@ -1,24 +1,23 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { community, type User } from "./community";
+
+/** 只认已经留下暗语的会话；不再创建游客。 */
 export function useGuest() {
   const [user, setUser] = useState<User | null>(null);
-  const entered = useRef(false);
   useEffect(() => {
     let mounted = true;
-    community<{ user: User | null }>("/session")
+    community<{ user: (User & { login?: boolean }) | null }>("/session")
       .then((data) => {
-        if (mounted && !entered.current) setUser(data.user);
+        if (!mounted) return;
+        if (data.user?.login) setUser({ id: data.user.id, name: data.user.name });
       })
       .catch(() => {});
     return () => {
       mounted = false;
     };
   }, []);
-  async function enter(name: string) {
-    const result = await community<{ user: User }>("/guest", "POST", { name });
-    entered.current = true;
-    setUser(result.user);
-    return result.user;
+  async function enter(_name: string): Promise<User> {
+    throw new Error("请先留下名字和暗语。");
   }
   return { user, enter };
 }

@@ -36,16 +36,12 @@ const places = [
 ];
 
 export function SocialSky({
-  name,
   user,
-  enter,
   draft = "",
   onHome,
   homeLabel = "回到我的星系",
 }: {
-  name: string;
   user: User | null;
-  enter: (name: string) => Promise<User>;
   draft?: string;
   onHome: () => void;
   homeLabel?: string;
@@ -193,7 +189,7 @@ export function SocialSky({
   async function publish(e: FormEvent) {
     e.preventDefault();
     await act(async () => {
-      if (!user) await enter(name);
+      if (!user) throw new Error("请先留下名字和暗语。");
       await community("/beacons", "POST", { body: words, mood, topic });
       await refresh();
       setSurface(null);
@@ -205,7 +201,7 @@ export function SocialSky({
     if (surface?.kind !== "beacon") return;
     const beacon = surface.beacon;
     await act(async () => {
-      if (!user) await enter(name);
+      if (!user) throw new Error("请先留下名字和暗语。");
       await community("/respond", "POST", { beaconId: beacon.id, body: reply });
       await refresh();
       setSurface(null);

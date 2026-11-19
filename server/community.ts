@@ -67,6 +67,9 @@ export function createCommunity(
     ["last_seen_at", "last_seen_at INTEGER"],
     ["login_name", "login_name TEXT"],
     ["password_hash", "password_hash TEXT"],
+    ["fate_asked", "fate_asked INTEGER NOT NULL DEFAULT 0"],
+    ["fate_uses", "fate_uses INTEGER NOT NULL DEFAULT 0"],
+    ["snapshot", "snapshot TEXT"],
   ] as const) {
     if (!have.has(name)) db.exec(`ALTER TABLE users ADD COLUMN ${definition}`);
   }
@@ -170,7 +173,9 @@ export function createCommunity(
   }
   function required(req: IncomingMessage) {
     const user = current(req);
-    if (!user) throw new ApiError(401, "先留下一个称呼，再把回声送出去。");
+    if (!user) throw new ApiError(401, "请先留下名字和暗语。");
+    const row = accountRow(user.id);
+    if (!row?.login_name) throw new ApiError(401, "请先留下名字和暗语。");
     return user;
   }
   function cookie(res: ServerResponse, token: string, age = 30 * 86400) {
@@ -229,6 +234,9 @@ export function createCommunity(
     updated_at: number | null;
     password_hash: string | null;
     login_name: string | null;
+    fate_asked: number | null;
+    fate_uses: number | null;
+    snapshot: string | null;
   };
   function accountRow(id: string) {
     return db.prepare("SELECT * FROM users WHERE id=?").get(id) as UserRow | undefined;
@@ -368,6 +376,10 @@ export function createCommunity(
         : null,
       bond: parseBond(mood?.bond),
       reachedAt: typeof mood?.reached_at === "number" ? mood.reached_at : null,
+      fateAsked: row.fate_asked === 1,
+      fateUses: Number(row.fate_uses || 0),
+      // 这一份是整份星图的原始副本，换域名或换设备时按它补齐所有本地字段。
+      raw: parseSnapshot(row.snapshot),
     };
   }
   function writeSky(userId: string, body: Record<string, unknown>, now: number) {
@@ -497,13 +509,16 @@ export function createCommunity(
         );
       }
       db.prepare(
-        "UPDATE users SET galaxy_id=?, round_turns=?, conjunction_at=?, conjunction_asked=?, zi_hour=?, updated_at=? WHERE id=?",
+        "UPDATE users SET galaxy_id=?, round_turns=?, conjunction_at=?, conjunction_asked=?, zi_hour=?, fate_asked=?, fate_uses=?, snapshot=?, updated_at=? WHERE id=?",
       ).run(
         textOrNull(body.galaxyId, 80),
         typeof body.roundTurns === "number" ? Math.max(0, Math.floor(body.roundTurns)) : 0,
         typeof body.conjunctionAt === "number" ? body.conjunctionAt : null,
         body.conjunctionAsked === true ? 1 : 0,
         body.ziHour === "late" ? "late" : "early",
+        body.fateAsked === true || Number(body.fateUses || 0) > 0 ? 1 : 0,
+        typeof body.fateUses === "number" ? Math.max(0, Math.floor(body.fateUses)) : 0,
+        snapshotText(body),
         now,
         userId,
       );
@@ -530,8 +545,11 @@ export function createCommunity(
     try {
       if (method !== "GET") {
         const origin = req.headers.origin;
-        const expected = process.env.APP_ORIGIN || `http://${req.headers.host}`;
-        if (origin && origin !== expected)
+        const allowed = (process.env.APP_ORIGIN || `http://${req.headers.host}`)
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (origin && !allowed.includes(origin))
           throw new ApiError(403, "请从这片星空重新进入。");
         if (!req.headers["content-type"]?.startsWith("application/json"))
           throw new ApiError(415, "请求格式不正确。");
@@ -544,33 +562,7 @@ export function createCommunity(
         return;
       }
       if (path === "/guest" && method === "POST") {
-        limited(`guest:${clientAddress(req)}`, 30, 15 * 60000);
-        const body = await readJson(req);
-        const name = clean(body.name, 24);
-        const existing = current(req);
-        if (existing) {
-          db.prepare("UPDATE users SET name=? WHERE id=?").run(
-            name,
-            existing.id,
-          );
-          send({ user: { id: existing.id, name } });
-          return;
-        }
-        const u = { id: randomUUID(), name };
-        const now = Date.now();
-        db.prepare(
-          "INSERT INTO users (id, name, created_at, updated_at, last_seen_at) VALUES(?,?,?,?,?)",
-        ).run(u.id, u.name, now, now, now);
-        const token = randomBytes(32).toString("base64url");
-        db.prepare("DELETE FROM sessions WHERE expires<?").run(Date.now());
-        db.prepare("INSERT INTO sessions VALUES(?,?,?)").run(
-          sha(token),
-          u.id,
-          Date.now() + 365 * DAY,
-        );
-        cookie(res, token, 365 * 86400);
-        send({ user: u });
-        return;
+        throw new ApiError(403, "请先留下名字和暗语。");
       }
       if (path === "/login" && method === "POST") {
         limited(`login:${clientAddress(req)}`, 10, 15 * 60000);
@@ -985,6 +977,46 @@ function checkPassword(secret: string, stored: string) {
   const prev = Buffer.from(hash, "base64url");
   if (next.length !== prev.length) return false;
   return timingSafeEqual(next, prev);
+}
+
+/** 整份星图的原始副本，用来在换域名或换设备时补齐本地所有字段。 */
+function snapshotText(body: Record<string, unknown>) {
+  const pick = {
+    galaxyId: body.galaxyId,
+    roundTurns: body.roundTurns,
+    conjunctionAt: body.conjunctionAt,
+    conjunctionAsked: body.conjunctionAsked,
+    fateAsked: body.fateAsked,
+    fateUses: body.fateUses,
+    ziHour: body.ziHour,
+    reachedAt: body.reachedAt,
+    mood: body.mood,
+    bond: body.bond,
+    asks: body.asks,
+    people: body.people,
+    links: body.links,
+    plans: body.plans,
+    quiz: body.quiz,
+    personaSource: body.personaSource,
+    mirror: body.mirror,
+    branchMessages: body.branchMessages,
+  };
+  try {
+    const text = JSON.stringify(pick);
+    return text.length > 400000 ? null : text;
+  } catch {
+    return null;
+  }
+}
+
+function parseSnapshot(raw: string | null | undefined) {
+  if (typeof raw !== "string" || !raw) return null;
+  try {
+    const value = JSON.parse(raw);
+    return value && typeof value === "object" ? value : null;
+  } catch {
+    return null;
+  }
 }
 
 function clean(value: unknown, max: number) {

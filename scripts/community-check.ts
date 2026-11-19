@@ -60,9 +60,9 @@ try {
   assert.equal(
     (
       await request(
-        "/guest",
+        "/login",
         "POST",
-        { name: "A" },
+        { intent: "open", name: "A", secret: "secret-a" },
         "",
         "https://foreign.example",
       )
@@ -70,9 +70,14 @@ try {
     403,
     "Cross-origin mutations rejected",
   );
-  const a = await request("/guest", "POST", { name: "访客 A" }),
-    b = await request("/guest", "POST", { name: "访客 B" }),
-    c = await request("/guest", "POST", { name: "访客 C" });
+  assert.equal(
+    (await request("/guest", "POST", { name: "游客" })).status,
+    403,
+    "Guest entry closed",
+  );
+  const a = await request("/login", "POST", { intent: "open", name: "访客 A", secret: "secret-a" }),
+    b = await request("/login", "POST", { intent: "open", name: "访客 B", secret: "secret-b" }),
+    c = await request("/login", "POST", { intent: "open", name: "访客 C", secret: "secret-c" });
   const ac = a.cookie.split(";")[0],
     bc = b.cookie.split(";")[0],
     cc = c.cookie.split(";")[0];
@@ -83,10 +88,9 @@ try {
     a.data.user.id,
   );
   assert.equal(
-    (await request("/guest", "POST", { name: "访客 A 的新称呼" }, ac)).data.user
-      .id,
-    a.data.user.id,
-    "Returning guest is the same person",
+    (await request("/session", "GET", undefined, ac)).data.user.login,
+    true,
+    "Opened star has a login",
   );
   const post = { body: "今天很累，想找人聊聊。", mood: "hear", topic: "work" };
   assert.equal((await request("/beacons", "POST", post, ac)).status, 200);

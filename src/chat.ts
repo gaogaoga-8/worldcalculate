@@ -109,6 +109,16 @@ export function reply(input: string, ctx: ChatContext): string {
   return defaultReply(chart);
 }
 
+export const STAR_PROMPTS = [
+  "最近在找工作？帮你看看这份机会",
+  "最近喜欢上一个人？帮你看看对方的心意",
+  "最近有件担心的事？帮你看看会怎样",
+  "有件事一直定不下来？帮你看看眼下",
+  "身体不太对劲？帮你看看要不要在意",
+  "钱上有些紧？帮你看看这段怎么过",
+  "想离开现在的地方？帮你看看时机",
+];
+
 export function promptsFor(ctx: ChatContext): string[] {
   const base = ["最近有一件事一直在意", "我想更了解自己", "看看我的命盘"];
   if (ctx.mbti) base.push(`聊聊我的 ${ctx.mbti}`);

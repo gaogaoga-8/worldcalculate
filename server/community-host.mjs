@@ -53,7 +53,10 @@ function createCommunity(file = process.env.COMMUNITY_DB || resolve(".data/commu
     ["updated_at", "updated_at INTEGER NOT NULL DEFAULT 0"],
     ["last_seen_at", "last_seen_at INTEGER"],
     ["login_name", "login_name TEXT"],
-    ["password_hash", "password_hash TEXT"]
+    ["password_hash", "password_hash TEXT"],
+    ["fate_asked", "fate_asked INTEGER NOT NULL DEFAULT 0"],
+    ["fate_uses", "fate_uses INTEGER NOT NULL DEFAULT 0"],
+    ["snapshot", "snapshot TEXT"]
   ]) {
     if (!have.has(name)) db.exec(`ALTER TABLE users ADD COLUMN ${definition}`);
   }
@@ -156,7 +159,9 @@ function createCommunity(file = process.env.COMMUNITY_DB || resolve(".data/commu
   }
   function required(req) {
     const user = current(req);
-    if (!user) throw new ApiError(401, "\u5148\u7559\u4E0B\u4E00\u4E2A\u79F0\u547C\uFF0C\u518D\u628A\u56DE\u58F0\u9001\u51FA\u53BB\u3002");
+    if (!user) throw new ApiError(401, "\u8BF7\u5148\u7559\u4E0B\u540D\u5B57\u548C\u6697\u8BED\u3002");
+    const row = accountRow(user.id);
+    if (!row?.login_name) throw new ApiError(401, "\u8BF7\u5148\u7559\u4E0B\u540D\u5B57\u548C\u6697\u8BED\u3002");
     return user;
   }
   function cookie(res, token, age = 30 * 86400) {
@@ -322,7 +327,11 @@ function createCommunity(file = process.env.COMMUNITY_DB || resolve(".data/commu
       })),
       mood: mood ? { near: Number(mood.near), sting: Number(mood.sting), worry: Number(mood.worry), lift: Number(mood.lift), at: Number(mood.at) } : null,
       bond: parseBond(mood?.bond),
-      reachedAt: typeof mood?.reached_at === "number" ? mood.reached_at : null
+      reachedAt: typeof mood?.reached_at === "number" ? mood.reached_at : null,
+      fateAsked: row.fate_asked === 1,
+      fateUses: Number(row.fate_uses || 0),
+      // 这一份是整份星图的原始副本，换域名或换设备时按它补齐所有本地字段。
+      raw: parseSnapshot(row.snapshot)
     };
   }
   function writeSky(userId, body, now) {
@@ -392,7 +401,7 @@ function createCommunity(file = process.env.COMMUNITY_DB || resolve(".data/commu
         const ask = item;
         const kind = ask.kind === "feeling" || ask.kind === "bond" ? ask.kind : ask.kind === "thing" ? "thing" : "";
         const question = textOrNull(ask.question, 500);
-        const answer = textOrNull(ask.answer, 8000);
+        const answer = textOrNull(ask.answer, 8e3);
         if (!kind || !question || !answer) continue;
         insertAsk.run(
           textOrNull(ask.id, 80) || randomUUID(),
@@ -413,11 +422,12 @@ function createCommunity(file = process.env.COMMUNITY_DB || resolve(".data/commu
         const person = item;
         const time = person.time && typeof person.time === "object" ? person.time : null;
         const place = person.place && typeof person.place === "object" ? person.place : null;
+        if (!time || !place) continue;
         const name = textOrNull(person.name, 40);
-        const year = time && typeof time.year === "number" ? time.year : null;
-        const month = time && typeof time.month === "number" ? time.month : null;
-        const day = time && typeof time.day === "number" ? time.day : null;
-        if (!name || person.gender !== "male" && person.gender !== "female" || year == null || month == null || day == null || !place) continue;
+        const year = typeof time.year === "number" ? time.year : null;
+        const month = typeof time.month === "number" ? time.month : null;
+        const day = typeof time.day === "number" ? time.day : null;
+        if (!name || person.gender !== "male" && person.gender !== "female" || year == null || month == null || day == null) continue;
         insertPerson.run(
           textOrNull(person.id, 80) || randomUUID(),
           userId,
@@ -451,13 +461,16 @@ function createCommunity(file = process.env.COMMUNITY_DB || resolve(".data/commu
         );
       }
       db.prepare(
-        "UPDATE users SET galaxy_id=?, round_turns=?, conjunction_at=?, conjunction_asked=?, zi_hour=?, updated_at=? WHERE id=?"
+        "UPDATE users SET galaxy_id=?, round_turns=?, conjunction_at=?, conjunction_asked=?, zi_hour=?, fate_asked=?, fate_uses=?, snapshot=?, updated_at=? WHERE id=?"
       ).run(
         textOrNull(body.galaxyId, 80),
         typeof body.roundTurns === "number" ? Math.max(0, Math.floor(body.roundTurns)) : 0,
         typeof body.conjunctionAt === "number" ? body.conjunctionAt : null,
         body.conjunctionAsked === true ? 1 : 0,
         body.ziHour === "late" ? "late" : "early",
+        body.fateAsked === true || Number(body.fateUses || 0) > 0 ? 1 : 0,
+        typeof body.fateUses === "number" ? Math.max(0, Math.floor(body.fateUses)) : 0,
+        snapshotText(body),
         now,
         userId
       );
@@ -480,8 +493,8 @@ function createCommunity(file = process.env.COMMUNITY_DB || resolve(".data/commu
     try {
       if (method !== "GET") {
         const origin = req.headers.origin;
-        const expected = process.env.APP_ORIGIN || `http://${req.headers.host}`;
-        if (origin && origin !== expected)
+        const allowed = (process.env.APP_ORIGIN || `http://${req.headers.host}`).split(",").map((s) => s.trim()).filter(Boolean);
+        if (origin && !allowed.includes(origin))
           throw new ApiError(403, "\u8BF7\u4ECE\u8FD9\u7247\u661F\u7A7A\u91CD\u65B0\u8FDB\u5165\u3002");
         if (!req.headers["content-type"]?.startsWith("application/json"))
           throw new ApiError(415, "\u8BF7\u6C42\u683C\u5F0F\u4E0D\u6B63\u786E\u3002");
@@ -494,33 +507,7 @@ function createCommunity(file = process.env.COMMUNITY_DB || resolve(".data/commu
         return;
       }
       if (path === "/guest" && method === "POST") {
-        limited(`guest:${clientAddress(req)}`, 30, 15 * 6e4);
-        const body = await readJson(req);
-        const name = clean(body.name, 24);
-        const existing = current(req);
-        if (existing) {
-          db.prepare("UPDATE users SET name=? WHERE id=?").run(
-            name,
-            existing.id
-          );
-          send({ user: { id: existing.id, name } });
-          return;
-        }
-        const u = { id: randomUUID(), name };
-        const now = Date.now();
-        db.prepare(
-          "INSERT INTO users (id, name, created_at, updated_at, last_seen_at) VALUES(?,?,?,?,?)"
-        ).run(u.id, u.name, now, now, now);
-        const token = randomBytes(32).toString("base64url");
-        db.prepare("DELETE FROM sessions WHERE expires<?").run(Date.now());
-        db.prepare("INSERT INTO sessions VALUES(?,?,?)").run(
-          sha(token),
-          u.id,
-          Date.now() + 365 * DAY
-        );
-        cookie(res, token, 365 * 86400);
-        send({ user: u });
-        return;
+        throw new ApiError(403, "\u8BF7\u5148\u7559\u4E0B\u540D\u5B57\u548C\u6697\u8BED\u3002");
       }
       if (path === "/login" && method === "POST") {
         limited(`login:${clientAddress(req)}`, 10, 15 * 6e4);
@@ -899,6 +886,43 @@ function checkPassword(secret, stored) {
   const prev = Buffer.from(hash, "base64url");
   if (next.length !== prev.length) return false;
   return timingSafeEqual(next, prev);
+}
+function snapshotText(body) {
+  const pick = {
+    galaxyId: body.galaxyId,
+    roundTurns: body.roundTurns,
+    conjunctionAt: body.conjunctionAt,
+    conjunctionAsked: body.conjunctionAsked,
+    fateAsked: body.fateAsked,
+    fateUses: body.fateUses,
+    ziHour: body.ziHour,
+    reachedAt: body.reachedAt,
+    mood: body.mood,
+    bond: body.bond,
+    asks: body.asks,
+    people: body.people,
+    links: body.links,
+    plans: body.plans,
+    quiz: body.quiz,
+    personaSource: body.personaSource,
+    mirror: body.mirror,
+    branchMessages: body.branchMessages
+  };
+  try {
+    const text = JSON.stringify(pick);
+    return text.length > 4e5 ? null : text;
+  } catch {
+    return null;
+  }
+}
+function parseSnapshot(raw) {
+  if (typeof raw !== "string" || !raw) return null;
+  try {
+    const value = JSON.parse(raw);
+    return value && typeof value === "object" ? value : null;
+  } catch {
+    return null;
+  }
 }
 function clean(value, max) {
   const text = typeof value === "string" ? value.trim() : "";

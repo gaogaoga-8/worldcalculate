@@ -8,7 +8,8 @@ Restart=on-failure
 User=www-data
 Environment=PORT=4174
 Environment=COMMUNITY_DB=/var/lib/shijie-suanfa/community.sqlite
-Environment=APP_ORIGIN=http://8.218.96.229
+Environment=APP_ORIGIN=https://aiching.top,https://www.aiching.top
+Environment=COOKIE_SECURE=1
 NoNewPrivileges=true
 
 [Install]
