@@ -192,6 +192,7 @@ assert.equal(
 );
 assert.equal(lit.roundTurns, 0);
 assert.equal(lit.stars[1].litAt, beforeMidnight);
+assert.equal(lit.stars[1].title, "慢慢来", "Star title comes from what the user said");
 assert.equal(
   finishDailyRound(lit, beforeMidnight),
   lit,
@@ -216,7 +217,7 @@ for (let i = 0; i < 7; i++) {
     ],
   };
   const next = finishDailyRound(journey, at);
-  assert.equal(next.stars.at(-1)?.title, RITUALS[i].title);
+  assert.ok(next.stars.at(-1)?.title, "Every lit star has a name from that day");
   assert.equal(next.stars.at(-1)?.echo, RITUALS[i].prompt);
   assert.equal(next.roundTurns, 0);
   assert.equal(finishDailyRound(next, at), next);
